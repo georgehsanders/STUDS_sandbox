@@ -428,7 +428,7 @@ def run_reconciliation():
 def login():
     if request.method == 'POST':
         settings = load_settings()
-        if request.form.get('password') == settings.get('app_password', DEFAULT_PASSWORD):
+        if request.form.get('password', '').strip() == settings.get('app_password', DEFAULT_PASSWORD):
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -496,9 +496,10 @@ def settings_page():
         settings['email_body_template'] = request.form.get('email_body_template', DEFAULT_EMAIL_BODY)
         # Handle password change
         new_password = request.form.get('new_password', '').strip()
+        password_changed = False
         if new_password:
             settings['app_password'] = new_password
-            flash('Password updated.', 'success')
+            password_changed = True
         # Save per-store emails
         store_emails = {}
         for key, val in request.form.items():
@@ -507,7 +508,10 @@ def settings_page():
                 store_emails[store_id] = val.strip()
         settings['store_emails'] = store_emails
         save_settings(settings)
-        flash('Settings saved.', 'success')
+        if password_changed:
+            flash('Settings saved. Password has been updated — use the new password on next login.', 'success')
+        else:
+            flash('Settings saved.', 'success')
         return redirect(url_for('settings_page'))
 
     # Get all store IDs for email configuration
