@@ -514,6 +514,36 @@ def upload():
     return render_template('upload.html', files=current_files)
 
 
+@app.route('/delete-file', methods=['POST'])
+@login_required
+def delete_file():
+    filename = request.form.get('filename', '')
+    if not filename or '/' in filename or '..' in filename:
+        flash('Invalid filename.', 'error')
+        return redirect(url_for('upload'))
+    filepath = os.path.join(INPUT_DIR, filename)
+    if os.path.isfile(filepath):
+        os.remove(filepath)
+        flash(f'Deleted {filename}.', 'success')
+    else:
+        flash(f'File not found: {filename}', 'error')
+    return redirect(url_for('upload'))
+
+
+@app.route('/delete-all-files', methods=['POST'])
+@login_required
+def delete_all_files():
+    count = 0
+    if os.path.isdir(INPUT_DIR):
+        for fname in os.listdir(INPUT_DIR):
+            fpath = os.path.join(INPUT_DIR, fname)
+            if os.path.isfile(fpath):
+                os.remove(fpath)
+                count += 1
+    flash(f'Deleted {count} file(s) from /input/.', 'success')
+    return redirect(url_for('upload'))
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings_page():
