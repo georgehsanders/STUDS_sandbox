@@ -12,10 +12,10 @@
         <div class="header-meta">
             <span>Last loaded: <strong id="last-loaded">{{ data.last_loaded }}</strong></span>
             <button id="refresh-btn" onclick="refreshData()">Refresh</button>
-            <a href="/export" class="btn-export">Export CSV</a>
-            <a href="/upload" class="nav-link">Upload</a>
-            <a href="/settings" class="nav-link">Settings</a>
-            <a href="/logout" class="nav-link">Logout</a>
+            <a href="/hq/export" class="btn-export">Export CSV</a>
+            <a href="/hq/upload" class="nav-link">Upload</a>
+            <a href="/hq/settings" class="nav-link">Settings</a>
+            <a href="/hq/logout" class="nav-link">Logout</a>
         </div>
     </header>
 
@@ -246,7 +246,7 @@
             var btn = document.getElementById('refresh-btn');
             btn.disabled = true;
             btn.textContent = 'Refreshing...';
-            fetch('/refresh', { method: 'POST' })
+            fetch('/hq/refresh', { method: 'POST' })
                 .then(function(resp) { return resp.json(); })
                 .then(function(data) {
                     window.location.reload();
@@ -259,7 +259,7 @@
         }
 
         function showEmailDraft(storeId) {
-            fetch('/email-draft/' + storeId)
+            fetch('/hq/email-draft/' + storeId)
                 .then(function(resp) { return resp.json(); })
                 .then(function(draft) {
                     document.getElementById('modal-title').textContent = 'Email Draft — ' + draft.store_name;

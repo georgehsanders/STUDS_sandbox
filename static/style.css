@@ -338,50 +338,76 @@ header h1 {
     font-size: 0.85rem;
 }
 
-/* Login page */
-.login-container {
-    max-width: 360px;
-    margin: 100px auto;
+/* Portal login pages */
+.portal-login-body {
+    background: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 0;
+    max-width: none;
+    padding-bottom: 10vh;
+}
+
+.portal-login-container {
     text-align: center;
+    width: 280px;
 }
 
-.login-container h1 {
-    font-size: 1.6rem;
-    margin-bottom: 4px;
-}
-
-.login-subtitle {
-    font-size: 0.9rem;
-    color: #6b7280;
+.portal-login-title {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: #1a1a1a;
     margin-bottom: 24px;
 }
 
-.login-form {
+.portal-login-form {
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-.login-form input {
+.portal-login-form input {
     padding: 10px 14px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 1rem;
+    border: 1.5px solid #000000;
+    border-radius: 0;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
-.login-form button {
+.portal-login-form button {
     padding: 10px 14px;
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
+    background: #ffffff;
+    color: #000000;
+    border: 1.5px solid #000000;
+    border-radius: 0;
     cursor: pointer;
-    font-size: 1rem;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
-.login-form button:hover {
-    background: #1d4ed8;
+.portal-login-form button:hover {
+    text-decoration: underline;
+}
+
+.portal-back-link {
+    display: inline-block;
+    margin-top: 20px;
+    color: #6b7280;
+    text-decoration: none;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+}
+
+.portal-back-link:hover {
+    text-decoration: underline;
+    color: #1a1a1a;
 }
 
 /* Upload page */

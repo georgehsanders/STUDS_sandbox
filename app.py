@@ -11,7 +11,8 @@ from flask import (Flask, render_template, jsonify, request, redirect,
 app = Flask(__name__)
 
 # --- Password protection ---
-DEFAULT_PASSWORD = 'studs2024'
+DEFAULT_STUDIO_PASSWORD = 'studio26'
+DEFAULT_HQ_PASSWORD = 'hq26'
 app.secret_key = 'studs-secret-key-change-in-production'
 
 INPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'input')
@@ -50,11 +51,20 @@ def is_excluded_sku(sku):
     return bool(RE_RS_PREFIX.match(sku))
 
 
-def login_required(f):
+def studio_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect(url_for('login'))
+        if not session.get('studio_logged_in'):
+            return redirect(url_for('studio_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def hq_login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('hq_logged_in'):
+            return redirect(url_for('hq_login'))
         return f(*args, **kwargs)
     return decorated
 
@@ -64,7 +74,8 @@ def load_settings():
     defaults = {
         'email_body_template': DEFAULT_EMAIL_BODY,
         'store_emails': {},
-        'app_password': DEFAULT_PASSWORD,
+        'studio_password': DEFAULT_STUDIO_PASSWORD,
+        'hq_password': DEFAULT_HQ_PASSWORD,
     }
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -461,42 +472,77 @@ def run_reconciliation():
 
 # --- Flask routes ---
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        settings = load_settings()
-        if request.form.get('password', '').strip() == settings.get('app_password', DEFAULT_PASSWORD):
-            session['logged_in'] = True
-            return redirect(url_for('index'))
-        else:
-            flash('Incorrect password.', 'error')
-    return render_template('login.html')
-
-
-@app.route('/logout')
-def logout():
-    session.pop('logged_in', None)
-    return redirect(url_for('login'))
-
+# --- Landing page (unauthenticated) ---
 
 @app.route('/')
-@login_required
-def index():
+def landing():
+    return render_template('landing.html')
+
+
+# --- Studio portal ---
+
+@app.route('/studio/login', methods=['GET', 'POST'])
+def studio_login():
+    if request.method == 'POST':
+        settings = load_settings()
+        if request.form.get('password', '').strip() == settings.get('studio_password', DEFAULT_STUDIO_PASSWORD):
+            session['studio_logged_in'] = True
+            return redirect(url_for('studio_index'))
+        else:
+            flash('Incorrect password.', 'error')
+    return render_template('studio_login.html')
+
+
+@app.route('/studio/logout')
+def studio_logout():
+    session.pop('studio_logged_in', None)
+    return redirect(url_for('landing'))
+
+
+@app.route('/studio/')
+@studio_login_required
+def studio_index():
+    return render_template('studio.html')
+
+
+# --- HQ portal ---
+
+@app.route('/hq/login', methods=['GET', 'POST'])
+def hq_login():
+    if request.method == 'POST':
+        settings = load_settings()
+        if request.form.get('password', '').strip() == settings.get('hq_password', DEFAULT_HQ_PASSWORD):
+            session['hq_logged_in'] = True
+            return redirect(url_for('hq_index'))
+        else:
+            flash('Incorrect password.', 'error')
+    return render_template('hq_login.html')
+
+
+@app.route('/hq/logout')
+def hq_logout():
+    session.pop('hq_logged_in', None)
+    return redirect(url_for('landing'))
+
+
+@app.route('/hq/')
+@hq_login_required
+def hq_index():
     results = run_reconciliation()
     settings = load_settings()
     return render_template('index.html', data=results, settings=settings)
 
 
-@app.route('/refresh', methods=['POST'])
-@login_required
-def refresh():
+@app.route('/hq/refresh', methods=['POST'])
+@hq_login_required
+def hq_refresh():
     results = run_reconciliation()
     return jsonify(results)
 
 
-@app.route('/upload', methods=['GET', 'POST'])
-@login_required
-def upload():
+@app.route('/hq/upload', methods=['GET', 'POST'])
+@hq_login_required
+def hq_upload():
     if request.method == 'POST':
         files = request.files.getlist('files')
         uploaded = []
@@ -507,7 +553,7 @@ def upload():
                 uploaded.append(f.filename)
         if uploaded:
             flash(f'Uploaded {len(uploaded)} file(s): {", ".join(uploaded)}', 'success')
-        return redirect(url_for('upload'))
+        return redirect(url_for('hq_upload'))
 
     # List current files in /input/
     current_files = []
@@ -525,25 +571,25 @@ def upload():
     return render_template('upload.html', files=current_files)
 
 
-@app.route('/delete-file', methods=['POST'])
-@login_required
-def delete_file():
+@app.route('/hq/delete-file', methods=['POST'])
+@hq_login_required
+def hq_delete_file():
     filename = request.form.get('filename', '')
     if not filename or '/' in filename or '..' in filename:
         flash('Invalid filename.', 'error')
-        return redirect(url_for('upload'))
+        return redirect(url_for('hq_upload'))
     filepath = os.path.join(INPUT_DIR, filename)
     if os.path.isfile(filepath):
         os.remove(filepath)
         flash(f'Deleted {filename}.', 'success')
     else:
         flash(f'File not found: {filename}', 'error')
-    return redirect(url_for('upload'))
+    return redirect(url_for('hq_upload'))
 
 
-@app.route('/delete-all-files', methods=['POST'])
-@login_required
-def delete_all_files():
+@app.route('/hq/delete-all-files', methods=['POST'])
+@hq_login_required
+def hq_delete_all_files():
     count = 0
     if os.path.isdir(INPUT_DIR):
         for fname in os.listdir(INPUT_DIR):
@@ -552,20 +598,24 @@ def delete_all_files():
                 os.remove(fpath)
                 count += 1
     flash(f'Deleted {count} file(s) from /input/.', 'success')
-    return redirect(url_for('upload'))
+    return redirect(url_for('hq_upload'))
 
 
-@app.route('/settings', methods=['GET', 'POST'])
-@login_required
-def settings_page():
+@app.route('/hq/settings', methods=['GET', 'POST'])
+@hq_login_required
+def hq_settings_page():
     settings = load_settings()
     if request.method == 'POST':
         settings['email_body_template'] = request.form.get('email_body_template', DEFAULT_EMAIL_BODY)
-        # Handle password change
-        new_password = request.form.get('new_password', '').strip()
+        # Handle password changes
         password_changed = False
-        if new_password:
-            settings['app_password'] = new_password
+        new_studio_password = request.form.get('new_studio_password', '').strip()
+        if new_studio_password:
+            settings['studio_password'] = new_studio_password
+            password_changed = True
+        new_hq_password = request.form.get('new_hq_password', '').strip()
+        if new_hq_password:
+            settings['hq_password'] = new_hq_password
             password_changed = True
         # Save per-store emails
         store_emails = {}
@@ -576,19 +626,19 @@ def settings_page():
         settings['store_emails'] = store_emails
         save_settings(settings)
         if password_changed:
-            flash('Settings saved. Password has been updated — use the new password on next login.', 'success')
+            flash('Settings saved. Password(s) have been updated — use the new password on next login.', 'success')
         else:
             flash('Settings saved.', 'success')
-        return redirect(url_for('settings_page'))
+        return redirect(url_for('hq_settings_page'))
 
     # Get all store IDs for email configuration
     results = run_reconciliation()
     return render_template('settings.html', settings=settings, stores=results['stores'])
 
 
-@app.route('/email-draft/<store_id>')
-@login_required
-def email_draft(store_id):
+@app.route('/hq/email-draft/<store_id>')
+@hq_login_required
+def hq_email_draft(store_id):
     results = run_reconciliation()
     settings = load_settings()
 
@@ -633,9 +683,9 @@ def email_draft(store_id):
     return jsonify(draft)
 
 
-@app.route('/export')
-@login_required
-def export_csv():
+@app.route('/hq/export')
+@hq_login_required
+def hq_export_csv():
     results = run_reconciliation()
     output = io.StringIO()
     writer = csv.writer(output)

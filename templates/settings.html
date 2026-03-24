@@ -10,9 +10,9 @@
     <header>
         <h1>Settings</h1>
         <div class="header-meta">
-            <a href="/" class="nav-link">Dashboard</a>
-            <a href="/upload" class="nav-link">Upload</a>
-            <a href="/logout" class="nav-link">Logout</a>
+            <a href="/hq/" class="nav-link">Dashboard</a>
+            <a href="/hq/upload" class="nav-link">Upload</a>
+            <a href="/hq/logout" class="nav-link">Logout</a>
         </div>
     </header>
 
@@ -28,10 +28,18 @@
 
     <form method="POST">
         <div class="settings-section">
-            <h2>Login Password</h2>
-            <p class="upload-help">Change the dashboard login password. Leave blank to keep the current password.</p>
+            <h2>Change Studio Password</h2>
+            <p class="upload-help">Update the Studio portal login password. Leave blank to keep the current password.</p>
             <div style="max-width: 360px;">
-                <input type="password" name="new_password" class="settings-input" placeholder="Enter new password" autocomplete="new-password">
+                <input type="password" name="new_studio_password" class="settings-input" placeholder="Enter new Studio password" autocomplete="new-password">
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>Change HQ Password</h2>
+            <p class="upload-help">Update the HQ portal login password. Leave blank to keep the current password.</p>
+            <div style="max-width: 360px;">
+                <input type="password" name="new_hq_password" class="settings-input" placeholder="Enter new HQ password" autocomplete="new-password">
             </div>
         </div>
 

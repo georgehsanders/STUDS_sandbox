@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STUDS</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding-bottom: 10vh;
+        }
+        .landing {
+            text-align: center;
+        }
+        .landing-logo {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 52px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            color: #1a1a1a;
+            margin-bottom: 32px;
+        }
+        .landing-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        .landing-btn {
+            width: 160px;
+            height: 52px;
+            border: 1.5px solid #000000;
+            border-radius: 0;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            color: #000000;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .landing-btn:hover {
+            text-decoration: underline;
+        }
+        .btn-studio {
+            background: #c8f135;
+        }
+        .btn-hq {
+            background: #e8b4f8;
+        }
+    </style>
+</head>
+<body>
+    <div class="landing">
+        <div class="landing-logo">STUDS</div>
+        <div class="landing-buttons">
+            <a href="/studio/login" class="landing-btn btn-studio">STUDIO</a>
+            <a href="/hq/login" class="landing-btn btn-hq">HQ</a>
+        </div>
+    </div>
+</body>
+</html>
