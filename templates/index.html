@@ -19,6 +19,12 @@
         </div>
     </header>
 
+    {% if data.sku_bypass %}
+    <div class="sku-bypass-banner">
+        &#9888; No SKU list loaded &mdash; reconciling all variance SKUs. Upload a SKU list file to enable standard filtering.
+    </div>
+    {% endif %}
+
     {% if data.warnings %}
     <div class="warnings">
         {% for w in data.warnings %}

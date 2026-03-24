@@ -123,6 +123,19 @@ header h1 {
     background: #b91c1c;
 }
 
+/* SKU bypass banner */
+.sku-bypass-banner {
+    background: #fef9c3;
+    border: 2px solid #eab308;
+    color: #854d0e;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
 /* Warnings */
 .warnings {
     margin-bottom: 16px;

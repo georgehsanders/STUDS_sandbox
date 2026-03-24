@@ -273,7 +273,11 @@ def get_audit_date_range(audit_rows):
 def reconcile_store(store_id, weekly_skus, variance_data, audit_rows):
     """Reconcile a single store."""
     variance_skus = {item['sku'] for item in variance_data}
-    active_skus = {s for s in (weekly_skus & variance_skus) if not is_excluded_sku(s)}
+    if weekly_skus is not None:
+        active_skus = {s for s in (weekly_skus & variance_skus) if not is_excluded_sku(s)}
+    else:
+        # Bypass mode: no SKU list loaded, treat all variance SKUs as active
+        active_skus = {s for s in variance_skus if not is_excluded_sku(s)}
 
     variance_lookup = {item['sku']: item for item in variance_data}
 
@@ -339,6 +343,7 @@ def run_reconciliation():
     audit_date_max = None
 
     weekly_skus = set()
+    sku_bypass = False
     if scan['sku_lists']:
         sku_list_filename = scan['sku_lists'][0][0]
         try:
@@ -346,6 +351,11 @@ def run_reconciliation():
             sku_count = len(weekly_skus)
         except Exception as e:
             warnings.append(f"Failed to parse SKU list: {e}")
+    else:
+        # Bypass mode: no SKU list present, reconcile using all variance SKUs
+        sku_bypass = True
+        weekly_skus = None
+        warnings = [w for w in warnings if "No weekly SKU list file found" not in w]
 
     audit_rows = []
     audit_filename = None
@@ -359,7 +369,7 @@ def run_reconciliation():
 
     store_names = build_store_name_map(audit_rows)
 
-    can_reconcile = bool(weekly_skus) and len(scan.get('audit_trails', [])) > 0
+    can_reconcile = (bool(weekly_skus) or sku_bypass) and len(scan.get('audit_trails', [])) > 0
 
     all_store_ids = set(scan['variance_files'].keys())
     for row in audit_rows:
@@ -438,6 +448,7 @@ def run_reconciliation():
         'warnings': warnings,
         'sku_list_filename': sku_list_filename,
         'sku_count': sku_count,
+        'sku_bypass': sku_bypass,
         'audit_date_min': audit_date_min,
         'audit_date_max': audit_date_max,
         'total_stores': len(stores),
