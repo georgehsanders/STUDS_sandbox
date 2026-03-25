@@ -884,7 +884,7 @@ def hq_upload():
                 uploaded.append(f.filename)
         if uploaded:
             flash(f'Uploaded {len(uploaded)} file(s): {", ".join(uploaded)}', 'success')
-        return redirect(url_for('hq_index'))
+        return redirect(url_for('hq_upload'))
 
     # List current files in /input/
     current_files = []
