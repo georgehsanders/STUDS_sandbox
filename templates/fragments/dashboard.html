@@ -73,11 +73,11 @@
     <thead>
         <tr>
             <th class="hq-th-arrow"></th>
-            <th>Store</th>
-            <th>Status</th>
-            <th>Assigned SKUs</th>
-            <th>Discrepancies</th>
-            <th>Net Discrepancy</th>
+            <th class="sortable-col" onclick="sortTable('store-table',1,'string')">Store</th>
+            <th class="sortable-col" onclick="sortTable('store-table',2,'string')">Status</th>
+            <th class="sortable-col" onclick="sortTable('store-table',3,'number')">Assigned SKUs</th>
+            <th class="sortable-col" onclick="sortTable('store-table',4,'number')">Discrepancies</th>
+            <th class="sortable-col" onclick="sortTable('store-table',5,'number')">Net Discrepancy</th>
             <th></th>
         </tr>
     </thead>

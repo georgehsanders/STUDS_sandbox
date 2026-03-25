@@ -708,7 +708,7 @@ header h1 {
 }
 
 .hq-btn-lavender {
-    background: #ffffff;
+    background: #FFD700;
 }
 
 /* --- Main content area --- */
@@ -2055,7 +2055,7 @@ body.hq-body .settings-textarea {
 
 .hq-section-link {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 400;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -2352,7 +2352,7 @@ body.hq-body .settings-textarea {
 .hq-btn-lavender-link {
     display: inline-flex;
     align-items: center;
-    background: #ffffff;
+    background: #FFD700;
     color: #000000;
     border: 1.5px solid #000000;
     border-radius: 0;
@@ -2541,4 +2541,21 @@ body.hq-body .settings-textarea {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 24px;
+}
+
+/* --- Sortable columns --- */
+
+.sortable-col {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable-col:hover {
+    text-decoration: underline;
+}
+
+.sort-indicator {
+    font-size: 10px;
+    margin-left: 4px;
+    color: #1a1a1a;
 }

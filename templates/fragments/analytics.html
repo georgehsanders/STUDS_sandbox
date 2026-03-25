@@ -66,14 +66,14 @@ function scrollToSection(id) {
 <!-- Panel 3: Store Leaderboard -->
 <div class="hq-analytics-panel" id="analytics-rankings">
     <h3 class="hq-section-heading">Store Compliance Leaderboard</h3>
-    <table class="hq-table">
+    <table class="hq-table" id="leaderboard-table">
         <thead>
             <tr>
-                <th style="width:50px;">Rank</th>
-                <th>Studio</th>
-                <th>Compliance Rate</th>
-                <th>Avg Lag</th>
-                <th>Discrepancy Units</th>
+                <th style="width:50px;" class="sortable-col" onclick="sortTable('leaderboard-table',0,'number')">Rank</th>
+                <th class="sortable-col" onclick="sortTable('leaderboard-table',1,'string')">Studio</th>
+                <th class="sortable-col" onclick="sortTable('leaderboard-table',2,'percent')">Compliance Rate</th>
+                <th class="sortable-col" onclick="sortTable('leaderboard-table',3,'number')">Avg Lag</th>
+                <th class="sortable-col" onclick="sortTable('leaderboard-table',4,'number')">Discrepancy Units</th>
                 <th>Trend</th>
             </tr>
         </thead>
@@ -99,14 +99,14 @@ function scrollToSection(id) {
 <!-- Panel 4: Top Discrepancy SKUs -->
 <div class="hq-analytics-panel" id="analytics-skus">
     <h3 class="hq-section-heading">Chronic Discrepancy SKUs (Last 12 Weeks)</h3>
-    <table class="hq-table">
+    <table class="hq-table" id="skus-table">
         <thead>
             <tr>
-                <th>SKU</th>
-                <th>Description</th>
-                <th>Total Units</th>
-                <th>Stores Affected</th>
-                <th>Weeks Appearing</th>
+                <th class="sortable-col" onclick="sortTable('skus-table',0,'string')">SKU</th>
+                <th class="sortable-col" onclick="sortTable('skus-table',1,'string')">Description</th>
+                <th class="sortable-col" onclick="sortTable('skus-table',2,'number')">Total Units</th>
+                <th class="sortable-col" onclick="sortTable('skus-table',3,'number')">Stores Affected</th>
+                <th class="sortable-col" onclick="sortTable('skus-table',4,'number')">Weeks Appearing</th>
             </tr>
         </thead>
         <tbody>

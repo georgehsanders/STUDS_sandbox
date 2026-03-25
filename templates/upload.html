@@ -27,7 +27,7 @@
                     <div class="hq-nav-box hq-nav-box-lavender" style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;flex-shrink:0;">
                         <span class="hq-portal-link hq-current">FILES</span>
                         <span class="hq-pipe">|</span>
-                        <a href="/hq/?section=dashboard" class="hq-portal-link">REFRESH</a>
+                        <a href="/hq/upload" class="hq-portal-link">REFRESH</a>
                         <span class="hq-pipe">|</span>
                         <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
                     </div>
@@ -107,9 +107,9 @@
                 <thead>
                     <tr>
                         <th class="select-col" style="display:none;width:30px;"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this);"></th>
-                        <th>File Name</th>
-                        <th>Last Modified</th>
-                        <th>Size</th>
+                        <th class="sortable-col" onclick="sortTable('files-table',1,'string')">File Name</th>
+                        <th class="sortable-col" onclick="sortTable('files-table',2,'string')">Last Modified</th>
+                        <th class="sortable-col" onclick="sortTable('files-table',3,'number')">Size</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -156,6 +156,39 @@
     </div>
 
     <script>
+        var _sortState = {};
+        function sortTable(tableId, colIndex, dataType) {
+            var table = document.getElementById(tableId);
+            if (!table) return;
+            var tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            var rows = Array.from(tbody.querySelectorAll('tr:not(.hq-file-separator)'));
+            var key = tableId + '-' + colIndex;
+            var asc = _sortState[key] !== 'asc';
+            _sortState[key] = asc ? 'asc' : 'desc';
+            rows.sort(function(a, b) {
+                var aCell = a.cells[colIndex], bCell = b.cells[colIndex];
+                if (!aCell || !bCell) return 0;
+                var aVal = aCell.textContent.trim(), bVal = bCell.textContent.trim();
+                if (dataType === 'number') { aVal = parseFloat(aVal.replace(/[^0-9.\-]/g,''))||0; bVal = parseFloat(bVal.replace(/[^0-9.\-]/g,''))||0; }
+                else { aVal = aVal.toLowerCase(); bVal = bVal.toLowerCase(); }
+                if (aVal < bVal) return asc ? -1 : 1;
+                if (aVal > bVal) return asc ? 1 : -1;
+                return 0;
+            });
+            rows.forEach(function(row) { tbody.appendChild(row); });
+            var headers = table.querySelectorAll('th');
+            headers.forEach(function(th, i) {
+                var ind = th.querySelector('.sort-indicator');
+                if (ind) ind.remove();
+                if (i === colIndex) {
+                    var span = document.createElement('span');
+                    span.className = 'sort-indicator';
+                    span.textContent = asc ? ' \u2191' : ' \u2193';
+                    th.appendChild(span);
+                }
+            });
+        }
         var selectMode = false;
         function toggleSelectMode() {
             selectMode = !selectMode;

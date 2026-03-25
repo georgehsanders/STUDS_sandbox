@@ -10,14 +10,14 @@
 
     <div id="studios-list" class="hq-section" style="margin-top:24px;">
         <h2 class="hq-section-heading">All Studios</h2>
-        <table class="hq-table">
+        <table class="hq-table" id="studios-table">
             <thead>
                 <tr>
                     <th style="width:50px;">Count</th>
-                    <th>Studio</th>
-                    <th>Manager</th>
-                    <th>Email</th>
-                    <th>Phone</th>
+                    <th class="sortable-col" onclick="sortTable('studios-table',1,'string')">Studio</th>
+                    <th class="sortable-col" onclick="sortTable('studios-table',2,'string')">Manager</th>
+                    <th class="sortable-col" onclick="sortTable('studios-table',3,'string')">Email</th>
+                    <th class="sortable-col" onclick="sortTable('studios-table',4,'string')">Phone</th>
                 </tr>
             </thead>
             <tbody id="studios-tbody">

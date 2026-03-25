@@ -67,6 +67,49 @@
         var storeDataGlobal = {{ db_stores | tojson }};
         var currentSection = null;
         var activeStoreId = null;
+        var _sortState = {};
+
+        function sortTable(tableId, colIndex, dataType) {
+            var table = document.getElementById(tableId);
+            if (!table) return;
+            var tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            var rows = Array.from(tbody.querySelectorAll('tr:not(.hq-file-separator)'));
+            var key = tableId + '-' + colIndex;
+            var asc = _sortState[key] !== 'asc';
+            _sortState[key] = asc ? 'asc' : 'desc';
+            rows.sort(function(a, b) {
+                var aCell = a.cells[colIndex], bCell = b.cells[colIndex];
+                if (!aCell || !bCell) return 0;
+                var aVal = aCell.textContent.trim(), bVal = bCell.textContent.trim();
+                if (dataType === 'number') {
+                    aVal = parseFloat(aVal.replace(/[^0-9.\-]/g, '')) || 0;
+                    bVal = parseFloat(bVal.replace(/[^0-9.\-]/g, '')) || 0;
+                } else if (dataType === 'percent') {
+                    aVal = parseFloat(aVal.replace('%', '')) || 0;
+                    bVal = parseFloat(bVal.replace('%', '')) || 0;
+                } else {
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                }
+                if (aVal < bVal) return asc ? -1 : 1;
+                if (aVal > bVal) return asc ? 1 : -1;
+                return 0;
+            });
+            rows.forEach(function(row) { tbody.appendChild(row); });
+            // Update sort indicators
+            var headers = table.querySelectorAll('th');
+            headers.forEach(function(th, i) {
+                var ind = th.querySelector('.sort-indicator');
+                if (ind) ind.remove();
+                if (i === colIndex) {
+                    var span = document.createElement('span');
+                    span.className = 'sort-indicator';
+                    span.textContent = asc ? ' \u2191' : ' \u2193';
+                    th.appendChild(span);
+                }
+            });
+        }
         var storeReconData = {};
 
         function loadSection(section) {
