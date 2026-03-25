@@ -29,7 +29,14 @@
                     </div>
                 </div>
             </div>
-            <div class="hq-z1-bottom"><div class="hq-z1-bottom-left"></div><div class="hq-z1-bottom-right"></div></div>
+            <div class="hq-z1-bottom">
+                <div class="hq-z1-bottom-left">
+                    {% if current_user_name %}<span class="hq-user-name">{{ current_user_name }}</span>{% endif %}
+                </div>
+                <div class="hq-z1-bottom-right">
+                    <span class="hq-timestamp"><strong>UPDATED:</strong> {{ last_loaded_global }}</span>
+                </div>
+            </div>
         </div>
         <hr class="hq-header-rule">
     </header>

@@ -1278,7 +1278,7 @@ def hq_email_draft(store_id):
             break
 
     if not store:
-        return "Store not found", 404
+        return "Studio not found", 404
 
     store_name = store.get('store_name', store_id)
     store_email = settings.get('store_emails', {}).get(store_id, '')
@@ -1483,6 +1483,15 @@ def hq_analytics():
 
 init_store_db()
 init_archive_db()
+
+
+@app.context_processor
+def inject_globals():
+    return {
+        'current_user_name': session.get('display_name', ''),
+        'last_loaded_global': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
 
 if __name__ == '__main__':
     os.makedirs(INPUT_DIR, exist_ok=True)
