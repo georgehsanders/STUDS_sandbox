@@ -83,7 +83,7 @@
     </thead>
     <tbody id="store-tbody">
         {% for store in data.stores %}
-        <tr class="store-row hq-store-row" data-store-id="{{ store.store_id }}" data-status="{{ store.status }}" data-discrepancy-count="{{ store.discrepancy_count }}" onclick="toggleDetail('{{ store.store_id }}')">
+        <tr class="hq-store-row" data-store-id="{{ store.store_id }}" data-status="{{ store.status }}" data-discrepancy-count="{{ store.discrepancy_count }}" onclick="toggleDetail('{{ store.store_id }}')">
             <td class="hq-expand-arrow" id="arrow-{{ store.store_id }}">&#9654;</td>
             <td>{{ store.store_name }}</td>
             <td>
@@ -100,7 +100,7 @@
             <td class="hq-action-cell" onclick="event.stopPropagation()">
             </td>
         </tr>
-        <tr class="detail-row hq-detail-row" id="detail-{{ store.store_id }}" style="display:none;">
+        <tr class="hq-detail-row" id="detail-{{ store.store_id }}" style="display:none;">
             <td colspan="7">
                 {% if store.sku_details %}
                 <table class="hq-detail-table">
@@ -165,7 +165,7 @@
             </div>
         </div>
         <div class="hq-modal-footer">
-            <button class="hq-btn hq-btn-lime btn-primary" onclick="copyEmailDraft()">COPY TO CLIPBOARD</button>
+            <button class="hq-btn hq-btn-lime" onclick="copyEmailDraft()">COPY TO CLIPBOARD</button>
         </div>
     </div>
 </div>

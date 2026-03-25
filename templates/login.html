@@ -12,9 +12,9 @@
         <p class="login-subtitle">Stock Check Dashboard</p>
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-        <div class="warnings">
+        <div class="hq-warnings">
             {% for category, message in messages %}
-            <div class="warning-item">{{ message }}</div>
+            <div class="hq-warning-item">{{ message }}</div>
             {% endfor %}
         </div>
         {% endif %}

@@ -185,8 +185,8 @@
         function applyFilters() {
             var filterVal = document.getElementById('filter-status').value;
             var sortVal = document.getElementById('sort-by').value;
-            var rows = document.querySelectorAll('.store-row');
-            var detailRows = document.querySelectorAll('.detail-row');
+            var rows = document.querySelectorAll('.hq-store-row');
+            var detailRows = document.querySelectorAll('.hq-detail-row');
             var pairs = [];
             rows.forEach(function(row, i) { pairs.push({ row: row, detail: detailRows[i] }); });
             pairs.forEach(function(p) {
@@ -226,7 +226,7 @@
             var subject = document.getElementById('email-subject').value;
             var body = document.getElementById('email-body').value;
             navigator.clipboard.writeText('To: ' + to + '\nSubject: ' + subject + '\n\n' + body).then(function() {
-                var btn = document.querySelector('.hq-modal-footer .btn-primary');
+                var btn = document.querySelector('.hq-modal-footer .hq-btn');
                 btn.textContent = 'Copied!';
                 setTimeout(function() { btn.textContent = 'COPY TO CLIPBOARD'; }, 2000);
             });
