@@ -418,7 +418,8 @@ header h1 {
     text-transform: uppercase;
     color: #000000;
     text-align: center;
-    margin-bottom: 16px;
+    margin-top: -14px;
+    margin-bottom: 30px;
 }
 
 /* Upload page */
