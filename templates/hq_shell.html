@@ -11,24 +11,24 @@
     <header class="hq-spa-header">
         <div class="hq-zone1">
             <div class="hq-z1-top">
-                <nav class="hq-z1-left">
+                <div class="hq-nav-box hq-nav-box-lime">
                     <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
                     <span class="hq-pipe">|</span>
                     <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
                     <span class="hq-pipe">|</span>
                     <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
-                </nav>
+                </div>
                 <div class="hq-z1-center">
                     <a href="/hq/" class="hq-logo-link">STUDS</a>
                     <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
                 </div>
-                <nav class="hq-z1-right">
+                <div class="hq-nav-box hq-nav-box-lavender">
                     <a href="/hq/upload" class="hq-portal-link">FILES</a>
                     <span class="hq-pipe">|</span>
                     <button class="hq-portal-link hq-portal-btn" id="refresh-btn" onclick="doRefresh();">REFRESH</button>
                     <span class="hq-pipe">|</span>
                     <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
-                </nav>
+                </div>
             </div>
             <div class="hq-z1-bottom">
                 <div class="hq-z1-bottom-left">
@@ -86,12 +86,15 @@
             fetch('/hq/section/' + section)
                 .then(function(r) { return r.text(); })
                 .then(function(html) {
-                    document.getElementById('hq-content').innerHTML = html;
-                    var scripts = document.getElementById('hq-content').querySelectorAll('script');
-                    scripts.forEach(function(old) {
-                        var s = document.createElement('script');
-                        s.textContent = old.textContent;
-                        old.parentNode.replaceChild(s, old);
+                    var content = document.getElementById('hq-content');
+                    content.innerHTML = html;
+                    content.querySelectorAll('script').forEach(function(oldScript) {
+                        var newScript = document.createElement('script');
+                        Array.from(oldScript.attributes).forEach(function(attr) {
+                            newScript.setAttribute(attr.name, attr.value);
+                        });
+                        newScript.textContent = oldScript.textContent;
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
                     });
                     history.pushState({section: section}, '', '/hq/?section=' + section);
                     if (section === 'dashboard') initDashboard();

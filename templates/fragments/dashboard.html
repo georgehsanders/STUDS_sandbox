@@ -46,23 +46,27 @@
 </div>
 
 <div class="hq-controls-row">
-    <label class="hq-control-label">Filter
-        <select id="filter-status" class="hq-select" onchange="applyFilters()">
-            <option value="all">All</option>
-            <option value="Updated">Updated</option>
-            <option value="Discrepancy Detected">Discrepancy Detected</option>
-            <option value="Incomplete">Incomplete</option>
-        </select>
-    </label>
-    <label class="hq-control-label">Sort
-        <select id="sort-by" class="hq-select" onchange="applyFilters()">
-            <option value="store_id">Store ID</option>
-            <option value="status">Status</option>
-            <option value="discrepancy_count">Discrepancy Count</option>
-        </select>
-    </label>
-    <a href="/hq/export" class="hq-btn hq-btn-lime-link">EXPORT CSV</a>
-    <a href="/hq/archive" class="hq-btn hq-btn-lavender-link">ARCHIVE</a>
+    <div class="hq-controls-left">
+        <label class="hq-control-label">Filter
+            <select id="filter-status" class="hq-select" onchange="applyFilters()">
+                <option value="all">All</option>
+                <option value="Updated">Updated</option>
+                <option value="Discrepancy Detected">Discrepancy Detected</option>
+                <option value="Incomplete">Incomplete</option>
+            </select>
+        </label>
+        <label class="hq-control-label">Sort
+            <select id="sort-by" class="hq-select" onchange="applyFilters()">
+                <option value="store_id">Store ID</option>
+                <option value="status">Status</option>
+                <option value="discrepancy_count">Discrepancy Count</option>
+            </select>
+        </label>
+    </div>
+    <div class="hq-controls-right">
+        <a href="/hq/export" class="hq-btn hq-btn-lime-link">EXPORT CSV</a>
+        <a href="/hq/archive" class="hq-btn hq-btn-lavender-link">ARCHIVE</a>
+    </div>
 </div>
 
 <table class="hq-table" id="store-table">

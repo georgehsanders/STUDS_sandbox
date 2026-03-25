@@ -204,12 +204,18 @@ def get_analytics_data():
     all_lags = [w['update_lag_hours'] for ws in _history.values() for w in ws if w['update_lag_hours'] is not None]
     total_disc = sum(abs(w['net_discrepancy']) for ws in _history.values() for w in ws)
     chronic_count = sum(1 for s in _leaderboard if s['compliance_rate'] < 60)
+    top_count = sum(1 for s in _leaderboard if s['compliance_rate'] >= 90)
+    chronic_stores = [s for s in _leaderboard if s['compliance_rate'] < 60]
+    top_stores = sorted([s for s in _leaderboard if s['compliance_rate'] >= 90], key=lambda x: x['compliance_rate'], reverse=True)
 
     return {
         'network_compliance_rate': round(total_updated / total_weeks * 100, 1) if total_weeks else 0,
         'avg_update_lag': round(sum(all_lags) / len(all_lags), 1) if all_lags else 0,
         'total_discrepancy_units': total_disc,
         'chronic_offender_count': chronic_count,
+        'top_performer_count': top_count,
+        'chronic_stores': chronic_stores,
+        'top_stores': top_stores,
         'weekly_trend': _weekly_trend,
         'leaderboard': _leaderboard,
         'top_skus': _top_skus,
