@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STUDS — Email Settings</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="hq-body">
+    <header class="hq-spa-header">
+        <div class="hq-zone1">
+            <nav class="hq-z1-left">
+                <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
+                <span class="hq-pipe">|</span>
+                <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
+                <span class="hq-pipe">|</span>
+                <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
+            </nav>
+            <div class="hq-z1-center">
+                <a href="/hq/" class="hq-logo-link">STUDS</a>
+                <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
+            </div>
+            <div class="hq-z1-right">
+                <nav class="hq-z1-right-nav">
+                    <a href="/hq/upload" class="hq-portal-link">FILES</a>
+                    <span class="hq-pipe">|</span>
+                    <a href="/hq/settings" class="hq-portal-link hq-current">SETTINGS</a>
+                </nav>
+            </div>
+        </div>
+        <hr class="hq-header-rule">
+    </header>
+
+    <div class="hq-page-content">
+        <a href="/hq/settings" class="hq-return-link" style="display:inline-block;margin-bottom:20px;">&larr; BACK TO SETTINGS</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="hq-warnings">
+            {% for category, message in messages %}
+            <div class="hq-warning-item {% if category == 'success' %}hq-warning-success{% endif %}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <div class="hq-section">
+                <h2 class="hq-section-heading">Email Template</h2>
+                <p class="hq-help-text">Default email body sent to stores with discrepancies. Use <code>{{ '{{sku_table}}' }}</code> as a placeholder for the list of discrepant SKUs.</p>
+                <textarea name="email_body_template" class="hq-textarea">{{ settings.email_body_template }}</textarea>
+            </div>
+
+            <div class="hq-section">
+                <h2 class="hq-section-heading">Store Email Addresses</h2>
+                <p class="hq-help-text">Set email addresses for each store. These will be used in email drafts.</p>
+                <table class="hq-table">
+                    <thead>
+                        <tr>
+                            <th>Store</th>
+                            <th>Email Address</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for store in stores %}
+                        <tr>
+                            <td>{{ store.store_name }}</td>
+                            <td><input type="email" name="store_email_{{ store.store_id }}" value="{{ settings.store_emails.get(store.store_id, '') }}" placeholder="store{{ store.store_id }}@studs.com" class="hq-input"></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <button type="submit" class="hq-btn hq-btn-lavender hq-btn-save">SAVE</button>
+        </form>
+    </div>
+</body>
+</html>

@@ -1870,10 +1870,19 @@ body.hq-body .settings-textarea {
 }
 
 .hq-zone2 {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     padding: 10px 32px;
+}
+
+.hq-z2-spacer {
+    min-width: 0;
+}
+
+.hq-section-nav {
+    display: flex;
+    align-items: center;
     gap: 10px;
 }
 
@@ -2048,4 +2057,75 @@ body.hq-body .settings-textarea {
 
 .hq-auth-fields .hq-inline-input {
     margin-top: 4px;
+}
+
+/* --- Logo link --- */
+
+.hq-logo-link {
+    text-decoration: none;
+    color: #1a1a1a;
+    display: block;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 62px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1;
+}
+
+.hq-logo-link:hover {
+    text-decoration: none;
+    color: #1a1a1a;
+}
+
+/* --- Settings menu --- */
+
+.hq-settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border: 1px solid #e0e0e0;
+    margin-bottom: 8px;
+    text-decoration: none;
+    color: #1a1a1a;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.hq-settings-row:hover {
+    background: #f7f7f7;
+}
+
+.hq-settings-row-title {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+.hq-settings-row-desc {
+    font-size: 12px;
+    color: #999999;
+    margin-top: 3px;
+}
+
+.hq-settings-arrow {
+    font-size: 18px;
+    color: #999999;
+}
+
+/* --- Profile 2-column layout --- */
+
+.hq-profile-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    color: #1a1a1a;
+}
+
+.hq-profile-col-left,
+.hq-profile-col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }

@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import sqlite3
+import zipfile
 from datetime import datetime
 from functools import wraps
 import bcrypt
@@ -1100,21 +1101,65 @@ def hq_delete_all_files():
     return redirect(url_for('hq_upload'))
 
 
-@app.route('/hq/settings', methods=['GET', 'POST'])
+@app.route('/hq/download-file')
+@hq_login_required
+def hq_download_file():
+    filename = request.args.get('filename', '')
+    if not filename or '/' in filename or '..' in filename:
+        return "Invalid filename", 400
+    filepath = os.path.join(INPUT_DIR, filename)
+    if os.path.isfile(filepath):
+        return send_from_directory(INPUT_DIR, filename, as_attachment=True)
+    return "File not found", 404
+
+
+@app.route('/hq/download-selected', methods=['POST'])
+@hq_login_required
+def hq_download_selected():
+    filenames = request.form.getlist('filenames')
+    if not filenames:
+        flash('No files selected.', 'error')
+        return redirect(url_for('hq_upload'))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname in filenames:
+            if '/' in fname or '..' in fname:
+                continue
+            fpath = os.path.join(INPUT_DIR, fname)
+            if os.path.isfile(fpath):
+                zf.write(fpath, fname)
+    buf.seek(0)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    return send_file(buf, mimetype='application/zip', as_attachment=True,
+                     download_name=f'STUDS_files_{timestamp}.zip')
+
+
+@app.route('/hq/delete-selected', methods=['POST'])
+@hq_login_required
+def hq_delete_selected():
+    filenames = request.form.getlist('filenames')
+    count = 0
+    for fname in filenames:
+        if '/' in fname or '..' in fname:
+            continue
+        fpath = os.path.join(INPUT_DIR, fname)
+        if os.path.isfile(fpath):
+            os.remove(fpath)
+            count += 1
+    flash(f'Deleted {count} file(s).', 'success')
+    return redirect(url_for('hq_upload'))
+
+
+@app.route('/hq/settings')
 @hq_login_required
 def hq_settings_page():
-    settings = load_settings()
+    return render_template('settings.html')
+
+
+@app.route('/hq/settings/credentials', methods=['GET', 'POST'])
+@hq_login_required
+def hq_settings_credentials():
     if request.method == 'POST':
-        settings['email_body_template'] = request.form.get('email_body_template', DEFAULT_EMAIL_BODY)
-        # Save per-store emails
-        store_emails = {}
-        for key, val in request.form.items():
-            if key.startswith('store_email_'):
-                store_id = key.replace('store_email_', '')
-                store_emails[store_id] = val.strip()
-        settings['store_emails'] = store_emails
-        save_settings(settings)
-        # Handle store credential updates
         cred_updated = False
         conn = get_db()
         for key, val in request.form.items():
@@ -1136,15 +1181,31 @@ def hq_settings_page():
         conn.commit()
         conn.close()
         if cred_updated:
-            flash('Settings saved. Store credentials have been updated.', 'success')
+            flash('Credentials updated.', 'success')
         else:
-            flash('Settings saved.', 'success')
-        return redirect(url_for('hq_settings_page'))
-
-    # Get all store IDs for email configuration
-    results = run_reconciliation()
+            flash('No changes made.', 'success')
+        return redirect(url_for('hq_settings_credentials'))
     db_stores = get_all_stores_db()
-    return render_template('settings.html', settings=settings, stores=results['stores'], db_stores=db_stores)
+    return render_template('settings_credentials.html', db_stores=db_stores)
+
+
+@app.route('/hq/settings/email', methods=['GET', 'POST'])
+@hq_login_required
+def hq_settings_email():
+    settings = load_settings()
+    if request.method == 'POST':
+        settings['email_body_template'] = request.form.get('email_body_template', DEFAULT_EMAIL_BODY)
+        store_emails = {}
+        for key, val in request.form.items():
+            if key.startswith('store_email_'):
+                store_id = key.replace('store_email_', '')
+                store_emails[store_id] = val.strip()
+        settings['store_emails'] = store_emails
+        save_settings(settings)
+        flash('Email settings saved.', 'success')
+        return redirect(url_for('hq_settings_email'))
+    results = run_reconciliation()
+    return render_template('settings_email.html', settings=settings, stores=results['stores'])
 
 
 @app.route('/hq/email-draft/<store_id>')

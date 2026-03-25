@@ -15,6 +15,7 @@
                     <th>Studio</th>
                     <th>Manager</th>
                     <th>Email</th>
+                    <th>Phone</th>
                 </tr>
             </thead>
             <tbody id="studios-tbody">
@@ -27,6 +28,7 @@
                     <td>{{ store.name }}</td>
                     <td>{{ store.manager or '—' }}</td>
                     <td>{{ store.email or '—' }}</td>
+                    <td>{{ store.phone or '—' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

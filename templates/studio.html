@@ -11,6 +11,10 @@
 
     <header class="studio-header">
         <div class="studio-header-left">
+            {% if session.get('is_admin') %}
+            <a href="/studio/goto-hq" class="studio-nav-link">HQ</a>
+            <span class="studio-header-rule"></span>
+            {% endif %}
             <span class="studio-logotype">STUDS</span>
             <span class="studio-header-rule"></span>
             <span class="studio-header-label">STUDIO</span>
@@ -23,9 +27,6 @@
             {% endif %}
             {% if not no_sku_list %}
             <button class="studio-btn-print" onclick="handlePrint()">PRINT</button>
-            {% endif %}
-            {% if session.get('is_admin') %}
-            <a href="/studio/goto-hq" class="studio-nav-link">HQ</a>
             {% endif %}
             <a href="/studio/logout" class="studio-nav-link">LOGOUT</a>
         </div>

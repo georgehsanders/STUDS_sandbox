@@ -9,110 +9,59 @@
 <body class="hq-body">
     <header class="hq-spa-header">
         <div class="hq-zone1">
-            <div class="hq-zone1-left">
-                <span class="hq-portal-link hq-portal-current">HQ</span>
+            <nav class="hq-z1-left">
+                <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
+                <span class="hq-pipe">|</span>
                 <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
+                <span class="hq-pipe">|</span>
                 <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
+            </nav>
+            <div class="hq-z1-center">
+                <a href="/hq/" class="hq-logo-link">STUDS</a>
+                <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
             </div>
-            <div class="hq-logo-block">
-                <a href="/hq/" class="hq-spa-logotype" style="text-decoration:none;color:#1a1a1a;">STUDS</a>
-                <span class="hq-spa-confidential">CONFIDENTIAL</span>
-            </div>
-            <div class="hq-zone1-right">
-                <a href="/hq/upload" class="hq-portal-link">UPLOAD</a>
-                <span class="hq-portal-link hq-portal-current">SETTINGS</span>
+            <div class="hq-z1-right">
+                <nav class="hq-z1-right-nav">
+                    <a href="/hq/upload" class="hq-portal-link">FILES</a>
+                    <span class="hq-pipe">|</span>
+                    <span class="hq-portal-link hq-current">SETTINGS</span>
+                </nav>
             </div>
         </div>
-        <div class="hq-header-divider"></div>
+        <hr class="hq-header-rule">
         <div class="hq-zone2">
-            <div class="hq-zone2-left">
+            <div class="hq-z2-spacer"></div>
+            <nav class="hq-section-nav">
                 <a href="/hq/" class="hq-section-link">DASHBOARD</a>
+                <span class="hq-pipe">|</span>
                 <a href="/hq/?section=analytics" class="hq-section-link">ANALYTICS</a>
+                <span class="hq-pipe">|</span>
                 <a href="/hq/?section=database" class="hq-section-link">DATABASE</a>
+                <span class="hq-pipe">|</span>
                 <a href="/hq/?section=studios" class="hq-section-link">STUDIOS</a>
-            </div>
+            </nav>
+            <div class="hq-z2-spacer"></div>
         </div>
     </header>
 
     <div class="hq-page-content">
+        <h2 class="hq-section-heading" style="margin-bottom:24px;">Settings</h2>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="hq-warnings">
-            {% for category, message in messages %}
-            <div class="hq-warning-item {% if category == 'success' %}hq-warning-success{% endif %}">{{ message }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-
-        <form method="POST">
-            <div class="hq-section">
-                <h2 class="hq-section-heading">Store Login Credentials</h2>
-                <p class="hq-help-text">Manage usernames and passwords for each store's Studio portal login. Leave password blank to keep current.</p>
-                <table class="hq-table">
-                    <thead>
-                        <tr>
-                            <th>Store</th>
-                            <th>Username</th>
-                            <th>New Password</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for store in db_stores %}
-                        <tr>
-                            <td>{{ store.name }}</td>
-                            <td>
-                                <input type="text" name="store_username_{{ store.store_id }}"
-                                       value="{{ store.username }}"
-                                       class="hq-input" autocomplete="off">
-                            </td>
-                            <td>
-                                <input type="password" name="store_password_{{ store.store_id }}"
-                                       placeholder="Leave blank to keep"
-                                       class="hq-input" autocomplete="new-password">
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <a href="/hq/settings/credentials" class="hq-settings-row">
+            <div>
+                <div class="hq-settings-row-title">Studio Login Credentials</div>
+                <div class="hq-settings-row-desc">Manage per-studio usernames and passwords</div>
             </div>
+            <span class="hq-settings-arrow">&rarr;</span>
+        </a>
 
-            <div class="hq-section">
-                <h2 class="hq-section-heading">Email Template</h2>
-                <p class="hq-help-text">Default email body sent to stores with discrepancies. Use <code>{{sku_table}}</code> as a placeholder for the list of discrepant SKUs.</p>
-                <textarea name="email_body_template" class="hq-textarea">{{ settings.email_body_template }}</textarea>
+        <a href="/hq/settings/email" class="hq-settings-row">
+            <div>
+                <div class="hq-settings-row-title">Email Templates</div>
+                <div class="hq-settings-row-desc">Customize the email draft template for discrepancy notifications</div>
             </div>
-
-            <div class="hq-section">
-                <h2 class="hq-section-heading">Store Email Addresses</h2>
-                <p class="hq-help-text">Set email addresses for each store. These will be used in email drafts.</p>
-                <table class="hq-table">
-                    <thead>
-                        <tr>
-                            <th>Store</th>
-                            <th>Email Address</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for store in stores %}
-                        <tr>
-                            <td>{{ store.store_name }}</td>
-                            <td>
-                                <input type="email" name="store_email_{{ store.store_id }}"
-                                       value="{{ settings.store_emails.get(store.store_id, '') }}"
-                                       placeholder="store{{ store.store_id }}@studs.com"
-                                       class="hq-input">
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <button type="submit" class="hq-btn hq-btn-lavender hq-btn-save">SAVE SETTINGS</button>
-        </form>
-
+            <span class="hq-settings-arrow">&rarr;</span>
+        </a>
     </div>
 </body>
 </html>

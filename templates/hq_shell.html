@@ -18,33 +18,37 @@
                 <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
             </nav>
             <div class="hq-z1-center">
-                <div class="hq-logotype">STUDS</div>
-                <div class="hq-confidential-sub">CONFIDENTIAL</div>
+                <a href="/hq/" class="hq-logo-link">STUDS</a>
+                <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
             </div>
             <div class="hq-z1-right">
-                <div class="hq-timestamp-box">
-                    <span class="hq-timestamp-label">UPDATED</span>
-                    <span id="last-loaded">{{ data.last_loaded }}</span>
-                </div>
                 <nav class="hq-z1-right-nav">
-                    <a href="/hq/upload" class="hq-portal-link">UPLOAD</a>
+                    <a href="/hq/upload" class="hq-portal-link">FILES</a>
                     <span class="hq-pipe">|</span>
                     <button class="hq-portal-link hq-portal-btn" id="refresh-btn" onclick="doRefresh();">REFRESH</button>
                     <span class="hq-pipe">|</span>
                     <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
                 </nav>
+                <div class="hq-timestamp-box">
+                    <span class="hq-timestamp-label">UPDATED</span>
+                    <span id="last-loaded">{{ data.last_loaded }}</span>
+                </div>
             </div>
         </div>
         <hr class="hq-header-rule">
-        <nav class="hq-zone2">
-            <a href="#" class="hq-section-link active" data-section="dashboard" onclick="loadSection('dashboard'); return false;">DASHBOARD</a>
-            <span class="hq-pipe">|</span>
-            <a href="#" class="hq-section-link" data-section="analytics" onclick="loadSection('analytics'); return false;">ANALYTICS</a>
-            <span class="hq-pipe">|</span>
-            <a href="#" class="hq-section-link" data-section="database" onclick="loadSection('database'); return false;">DATABASE</a>
-            <span class="hq-pipe">|</span>
-            <a href="#" class="hq-section-link" data-section="studios" onclick="loadSection('studios'); return false;">STUDIOS</a>
-        </nav>
+        <div class="hq-zone2">
+            <div class="hq-z2-spacer"></div>
+            <nav class="hq-section-nav">
+                <a href="#" class="hq-section-link" data-section="dashboard" onclick="loadSection('dashboard'); return false;">DASHBOARD</a>
+                <span class="hq-pipe">|</span>
+                <a href="#" class="hq-section-link" data-section="analytics" onclick="loadSection('analytics'); return false;">ANALYTICS</a>
+                <span class="hq-pipe">|</span>
+                <a href="#" class="hq-section-link" data-section="database" onclick="loadSection('database'); return false;">DATABASE</a>
+                <span class="hq-pipe">|</span>
+                <a href="#" class="hq-section-link" data-section="studios" onclick="loadSection('studios'); return false;">STUDIOS</a>
+            </nav>
+            <div class="hq-z2-spacer"></div>
+        </div>
     </header>
 
     <main id="hq-content" class="hq-main"></main>
@@ -53,8 +57,18 @@
         var storeDataGlobal = {{ db_stores | tojson }};
         var currentSection = null;
         var activeStoreId = null;
+        var storeReconData = {};
 
         function loadSection(section) {
+            if (!section) {
+                currentSection = null;
+                document.getElementById('hq-content').innerHTML = '';
+                document.querySelectorAll('.hq-section-link').forEach(function(l) {
+                    l.classList.remove('active');
+                });
+                history.pushState({}, '', '/hq/');
+                return;
+            }
             currentSection = section;
             document.querySelectorAll('.hq-section-link').forEach(function(l) {
                 if (l.dataset.section === section) {
@@ -89,7 +103,7 @@
                 .catch(function(err) { alert('Refresh failed: ' + err); });
         }
 
-        // Dashboard JS functions
+        // Dashboard JS
         function initDashboard() {
             var modal = document.getElementById('email-modal');
             if (modal) {
@@ -117,39 +131,29 @@
             var rows = document.querySelectorAll('.store-row');
             var detailRows = document.querySelectorAll('.detail-row');
             var pairs = [];
-            rows.forEach(function(row, i) {
-                pairs.push({ row: row, detail: detailRows[i] });
-            });
+            rows.forEach(function(row, i) { pairs.push({ row: row, detail: detailRows[i] }); });
             pairs.forEach(function(p) {
                 var status = p.row.getAttribute('data-status');
                 if (filterVal === 'all' || status === filterVal || (filterVal === 'Incomplete' && status.startsWith('Incomplete'))) {
                     p.row.style.display = '';
-                } else {
-                    p.row.style.display = 'none';
-                    p.detail.style.display = 'none';
-                }
+                } else { p.row.style.display = 'none'; p.detail.style.display = 'none'; }
             });
             var tbody = document.getElementById('store-tbody');
-            var sortedPairs = pairs.slice().sort(function(a, b) {
-                if (sortVal === 'store_id') {
-                    return parseInt(a.row.getAttribute('data-store-id')) - parseInt(b.row.getAttribute('data-store-id'));
-                } else if (sortVal === 'status') {
-                    var order = {'Discrepancy Detected': 0, 'Incomplete — Missing File': 1, 'Incomplete — Unrecognized File Format': 1, 'Updated': 2};
-                    return (order[a.row.getAttribute('data-status')] || 3) - (order[b.row.getAttribute('data-status')] || 3);
-                } else if (sortVal === 'discrepancy_count') {
-                    return parseInt(b.row.getAttribute('data-discrepancy-count')) - parseInt(a.row.getAttribute('data-discrepancy-count'));
+            var sorted = pairs.slice().sort(function(a, b) {
+                if (sortVal === 'store_id') return parseInt(a.row.getAttribute('data-store-id')) - parseInt(b.row.getAttribute('data-store-id'));
+                if (sortVal === 'status') {
+                    var order = {'Discrepancy Detected':0,'Incomplete — Missing File':1,'Incomplete — Unrecognized File Format':1,'Updated':2};
+                    return (order[a.row.getAttribute('data-status')]||3) - (order[b.row.getAttribute('data-status')]||3);
                 }
+                if (sortVal === 'discrepancy_count') return parseInt(b.row.getAttribute('data-discrepancy-count')) - parseInt(a.row.getAttribute('data-discrepancy-count'));
                 return 0;
             });
-            sortedPairs.forEach(function(p) {
-                tbody.appendChild(p.row);
-                tbody.appendChild(p.detail);
-            });
+            sorted.forEach(function(p) { tbody.appendChild(p.row); tbody.appendChild(p.detail); });
         }
 
         function showEmailDraft(storeId) {
             fetch('/hq/email-draft/' + storeId)
-                .then(function(resp) { return resp.json(); })
+                .then(function(r) { return r.json(); })
                 .then(function(draft) {
                     document.getElementById('modal-title').textContent = 'Email Draft — ' + draft.store_name;
                     document.getElementById('email-to').value = draft.to;
@@ -159,27 +163,22 @@
                 })
                 .catch(function(err) { alert('Failed to generate email draft: ' + err); });
         }
-
-        function closeEmailModal() {
-            document.getElementById('email-modal').style.display = 'none';
-        }
-
+        function closeEmailModal() { document.getElementById('email-modal').style.display = 'none'; }
         function copyEmailDraft() {
             var to = document.getElementById('email-to').value;
             var subject = document.getElementById('email-subject').value;
             var body = document.getElementById('email-body').value;
-            var full = 'To: ' + to + '\nSubject: ' + subject + '\n\n' + body;
-            navigator.clipboard.writeText(full).then(function() {
+            navigator.clipboard.writeText('To: ' + to + '\nSubject: ' + subject + '\n\n' + body).then(function() {
                 var btn = document.querySelector('.hq-modal-footer .btn-primary');
                 btn.textContent = 'Copied!';
                 setTimeout(function() { btn.textContent = 'COPY TO CLIPBOARD'; }, 2000);
             });
         }
 
-        // Studios JS functions
+        // Studios JS
         function initStudios() {
-            var searchEl = document.getElementById('studios-search');
-            if (searchEl) searchEl.focus();
+            var el = document.getElementById('studios-search');
+            if (el) el.focus();
         }
 
         function filterStudios() {
@@ -187,14 +186,11 @@
             var rows = document.querySelectorAll('.hq-studios-row');
             var matches = [];
             rows.forEach(function(row) {
-                var sid = row.dataset.sid;
-                var name = row.dataset.name;
+                var sid = row.dataset.sid, name = row.dataset.name;
                 if (!query || sid.indexOf(query) !== -1 || name.indexOf(query) !== -1) {
                     row.style.display = '';
                     if (query) matches.push({sid: sid, name: row.children[1].textContent});
-                } else {
-                    row.style.display = 'none';
-                }
+                } else { row.style.display = 'none'; }
             });
             var dd = document.getElementById('studios-dropdown');
             if (query && matches.length > 0 && matches.length <= 5) {
@@ -203,24 +199,20 @@
                         '<span>' + m.name + '</span><span class="hq-muted-text">' + m.sid + '</span></div>';
                 }).join('');
                 dd.style.display = 'block';
-            } else {
-                dd.style.display = 'none';
-            }
+            } else { dd.style.display = 'none'; }
         }
 
-        function getDotClass(status) {
-            if (!status) return 'hq-dot-unknown';
-            if (status === 'Updated') return 'hq-dot-updated';
-            if (status === 'Discrepancy Detected') return 'hq-dot-discrepancy';
-            if (status.indexOf('Incomplete') === 0) return 'hq-dot-incomplete';
+        function getDotClass(s) {
+            if (!s) return 'hq-dot-unknown';
+            if (s === 'Updated') return 'hq-dot-updated';
+            if (s === 'Discrepancy Detected') return 'hq-dot-discrepancy';
+            if (s.indexOf('Incomplete') === 0) return 'hq-dot-incomplete';
             return 'hq-dot-unknown';
         }
 
         function getLocalTime(tz) {
-            try {
-                var opts = {hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: tz};
-                return new Date().toLocaleTimeString('en-US', opts);
-            } catch(e) { return '—'; }
+            try { return new Date().toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZoneName:'short',timeZone:tz}); }
+            catch(e) { return '—'; }
         }
 
         function showStoreProfile(storeId) {
@@ -229,62 +221,86 @@
             activeStoreId = storeId;
             var store = storeDataGlobal.find(function(s) { return s.store_id === storeId; });
             if (!store) return;
+            var row = document.querySelector('.hq-studios-row[data-sid="' + storeId + '"]');
+            var status = row ? (row.dataset.status || '') : '';
+            var dotClass = getDotClass(status);
+            var statusText = status || 'No data';
+
+            var leftCol = '<div class="hq-profile-col-left">' +
+                '<span class="hq-summary-label">COUNT STATUS</span>' +
+                '<div style="margin-top:4px;"><span class="hq-count-dot ' + dotClass + '"></span> ' + statusText + '</div>';
+            if (status === 'Updated') {
+                leftCol += '<p class="hq-muted-text" style="margin-top:8px;color:#4a9e5c;">All SKUs reconciled.</p>';
+            } else if (status.indexOf('Incomplete') === 0) {
+                leftCol += '<p class="hq-muted-text" style="margin-top:8px;">' + status + '</p>';
+            }
+            leftCol += '</div>';
+
+            var rightCol = '<div class="hq-profile-col-right">' +
+                '<div><span class="hq-summary-label">TIME</span><div id="profile-time">' + getLocalTime(store.timezone) + '</div></div>' +
+                '<div><span class="hq-summary-label">MANAGER</span><div id="pv-manager">' + (store.manager || '—') + '</div></div>' +
+                '<div><span class="hq-summary-label">EMAIL</span><div id="pv-email">' + (store.email || '—') + '</div></div>' +
+                '<div><span class="hq-summary-label">PHONE</span><div id="pv-phone">' + (store.phone || '—') + '</div></div>' +
+                '</div>';
+
             var prof = document.getElementById('studios-profile');
             prof.style.display = 'block';
-            var statusEl = document.querySelector('.hq-studios-row[data-sid="' + storeId + '"]');
-            var status = statusEl ? statusEl.dataset.status : '';
-            var dotClass = getDotClass(status);
             prof.innerHTML =
                 '<div class="hq-section">' +
                     '<div class="hq-profile-header">' +
-                        '<div class="hq-profile-header-left">' +
-                            '<span class="hq-profile-name">' + store.name + '</span>' +
-                            '<span class="hq-count-dot ' + dotClass + '"></span>' +
-                        '</div>' +
+                        '<div class="hq-profile-header-left"><span class="hq-profile-name">' + store.name + '</span><span class="hq-count-dot ' + dotClass + '"></span></div>' +
                         '<button class="hq-btn hq-btn-lavender hq-profile-edit-btn" onclick="enterEditMode(\'' + storeId + '\')">EDIT</button>' +
                     '</div>' +
-                    '<div class="hq-profile-grid" id="profile-details">' +
-                        '<div><span class="hq-summary-label">TIME</span><div>' + getLocalTime(store.timezone) + '</div></div>' +
-                        '<div><span class="hq-summary-label">MANAGER</span><div id="pv-manager">' + (store.manager || '—') + '</div></div>' +
-                        '<div><span class="hq-summary-label">EMAIL</span><div id="pv-email">' + (store.email || '—') + '</div></div>' +
-                        '<div><span class="hq-summary-label">PHONE</span><div id="pv-phone">' + (store.phone || '—') + '</div></div>' +
-                    '</div>' +
+                    '<div class="hq-profile-2col" id="profile-details">' + leftCol + rightCol + '</div>' +
                     '<div id="profile-auth" style="display:none;"></div>' +
                     '<h3 class="hq-subsection-heading" style="margin-top:24px;">ANALYTICS</h3>' +
                     '<p class="hq-muted-text">Coming soon.</p>' +
                 '</div>';
+
+            // Update time every minute
+            if (window._profileTimer) clearInterval(window._profileTimer);
+            window._profileTimer = setInterval(function() {
+                var el = document.getElementById('profile-time');
+                if (el) el.textContent = getLocalTime(store.timezone);
+                else clearInterval(window._profileTimer);
+            }, 60000);
         }
 
         function enterEditMode(storeId) {
             var store = storeDataGlobal.find(function(s) { return s.store_id === storeId; });
             if (!store) return;
-            // Replace details with inputs
-            var details = document.getElementById('profile-details');
-            details.innerHTML =
+            var row = document.querySelector('.hq-studios-row[data-sid="' + storeId + '"]');
+            var status = row ? (row.dataset.status || '') : '';
+            var dotClass = getDotClass(status);
+            var statusText = status || 'No data';
+
+            var leftCol = '<div class="hq-profile-col-left">' +
+                '<span class="hq-summary-label">COUNT STATUS</span>' +
+                '<div style="margin-top:4px;"><span class="hq-count-dot ' + dotClass + '"></span> ' + statusText + '</div></div>';
+
+            var rightCol = '<div class="hq-profile-col-right">' +
                 '<div><span class="hq-summary-label">TIME</span><div>' + getLocalTime(store.timezone) + '</div></div>' +
                 '<div><span class="hq-summary-label">MANAGER</span><div><input type="text" id="edit-manager" class="hq-input hq-inline-input" value="' + (store.manager || '') + '"></div></div>' +
                 '<div><span class="hq-summary-label">EMAIL</span><div><input type="text" id="edit-email" class="hq-input hq-inline-input" value="' + (store.email || '') + '"></div></div>' +
-                '<div><span class="hq-summary-label">PHONE</span><div><input type="text" id="edit-phone" class="hq-input hq-inline-input" value="' + (store.phone || '') + '"></div></div>';
-            // Replace edit button with save/cancel
-            var headerRight = document.querySelector('.hq-profile-edit-btn');
-            headerRight.outerHTML =
+                '<div><span class="hq-summary-label">PHONE</span><div><input type="text" id="edit-phone" class="hq-input hq-inline-input" value="' + (store.phone || '') + '"></div></div>' +
+                '</div>';
+
+            document.getElementById('profile-details').innerHTML = leftCol + rightCol;
+            document.querySelector('.hq-profile-edit-btn').outerHTML =
                 '<div class="hq-profile-btn-group">' +
                     '<button class="hq-btn hq-btn-lavender hq-profile-edit-btn" onclick="saveStore(\'' + storeId + '\')">SAVE</button>' +
                     '<button class="hq-btn hq-btn-white hq-profile-edit-btn" onclick="showStoreProfile(\'' + storeId + '\')">CANCEL</button>' +
                     '<span id="save-status" class="hq-muted-text"></span>' +
                 '</div>';
-            // Show auth accordion
             var auth = document.getElementById('profile-auth');
             auth.style.display = 'block';
             auth.innerHTML =
-                '<div class="hq-auth-accordion">' +
-                    '<h3 class="hq-subsection-heading" style="margin-top:20px;">AUTHENTICATION &#9662;</h3>' +
-                    '<div class="hq-auth-fields">' +
-                        '<div><span class="hq-summary-label">USERNAME</span><input type="text" id="edit-username" class="hq-input hq-inline-input" value="' + store.username + '"></div>' +
-                        '<div><span class="hq-summary-label">NEW PASSWORD</span><input type="password" id="edit-newpw" class="hq-input hq-inline-input" placeholder="New password..."></div>' +
-                        '<div><span class="hq-summary-label">CONFIRM PASSWORD</span><input type="password" id="edit-confirmpw" class="hq-input hq-inline-input" placeholder="Confirm password..."></div>' +
-                    '</div>' +
-                '</div>';
+                '<div class="hq-auth-accordion"><h3 class="hq-subsection-heading" style="margin-top:20px;">AUTHENTICATION &#9662;</h3>' +
+                '<div class="hq-auth-fields">' +
+                '<div><span class="hq-summary-label">USERNAME</span><input type="text" id="edit-username" class="hq-input hq-inline-input" value="' + store.username + '"></div>' +
+                '<div><span class="hq-summary-label">NEW PASSWORD</span><input type="password" id="edit-newpw" class="hq-input hq-inline-input" placeholder="New password..."></div>' +
+                '<div><span class="hq-summary-label">CONFIRM PASSWORD</span><input type="password" id="edit-confirmpw" class="hq-input hq-inline-input" placeholder="Confirm password..."></div>' +
+                '</div></div>';
         }
 
         function saveStore(storeId) {
@@ -298,46 +314,31 @@
                 confirm_password: document.getElementById('edit-confirmpw').value
             };
             fetch('/hq/studios/update-store', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
             })
             .then(function(r) { return r.json(); })
             .then(function(res) {
-                var statusEl = document.getElementById('save-status');
+                var el = document.getElementById('save-status');
                 if (res.success) {
-                    // Update local data
                     var store = storeDataGlobal.find(function(s) { return s.store_id === storeId; });
-                    if (store) {
-                        store.manager = payload.manager;
-                        store.email = payload.email;
-                        store.phone = payload.phone;
-                        if (payload.username) store.username = payload.username;
-                    }
-                    if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = '#4a9e5c'; }
+                    if (store) { store.manager = payload.manager; store.email = payload.email; store.phone = payload.phone; if (payload.username) store.username = payload.username; }
+                    if (el) { el.textContent = 'Saved.'; el.style.color = '#4a9e5c'; }
                     setTimeout(function() { showStoreProfile(storeId); }, 800);
-                } else {
-                    if (statusEl) { statusEl.textContent = res.error || 'Error'; statusEl.style.color = '#c0392b'; }
-                }
+                } else { if (el) { el.textContent = res.error || 'Error'; el.style.color = '#c0392b'; } }
             })
-            .catch(function() {
-                var statusEl = document.getElementById('save-status');
-                if (statusEl) { statusEl.textContent = 'Network error'; statusEl.style.color = '#c0392b'; }
-            });
+            .catch(function() { var el = document.getElementById('save-status'); if (el) { el.textContent = 'Network error'; el.style.color = '#c0392b'; } });
         }
 
-        // Handle browser back/forward
         window.addEventListener('popstate', function(e) {
-            if (e.state && e.state.section) {
-                loadSection(e.state.section);
-            }
+            if (e.state && e.state.section) loadSection(e.state.section);
+            else loadSection(null);
         });
 
-        // Initial load
         (function() {
             var params = new URLSearchParams(window.location.search);
-            var section = params.get('section') || 'dashboard';
-            loadSection(section);
+            var section = params.get('section');
+            if (section) loadSection(section);
         })();
     </script>
 </body>
