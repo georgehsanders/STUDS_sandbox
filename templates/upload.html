@@ -9,18 +9,18 @@
 <body class="hq-body">
     <header class="hq-spa-header">
         <div class="hq-zone1">
-            <nav class="hq-z1-left">
-                <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
-                <span class="hq-pipe">|</span>
-                <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
-                <span class="hq-pipe">|</span>
-                <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
-            </nav>
-            <div class="hq-z1-center">
-                <a href="/hq/" class="hq-logo-link">STUDS</a>
-                <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
-            </div>
-            <div class="hq-z1-right">
+            <div class="hq-zone1-top">
+                <nav class="hq-z1-left">
+                    <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
+                    <span class="hq-pipe">|</span>
+                    <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
+                    <span class="hq-pipe">|</span>
+                    <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
+                </nav>
+                <div class="hq-z1-center">
+                    <a href="/hq/" class="hq-logo-link">STUDS</a>
+                    <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
+                </div>
                 <nav class="hq-z1-right-nav">
                     <span class="hq-portal-link hq-current">FILES</span>
                     <span class="hq-pipe">|</span>
@@ -57,7 +57,7 @@
         {% endwith %}
 
         <div class="hq-section">
-            <h2 class="hq-section-heading">Upload New Files</h2>
+            <h2 class="hq-section-heading">Add Files</h2>
             <p class="hq-help-text">Upload variance files, SKU lists, or audit trail CSVs.</p>
             <form method="POST" enctype="multipart/form-data" class="hq-upload-form">
                 <input type="file" name="files" multiple accept=".csv" required>
@@ -69,7 +69,7 @@
         <div class="hq-section">
             <h2 class="hq-section-heading">Current Files in /input/</h2>
             {% if files %}
-            <div style="display:flex;gap:10px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
                 <button type="button" class="hq-btn hq-btn-outline" onclick="toggleSelectMode();" id="select-mode-btn">SELECT FILES</button>
                 <form method="POST" action="/hq/delete-all-files" style="margin:0;">
                     <button type="submit" class="hq-btn hq-btn-outline" onclick="return confirm('Delete all files?')">DELETE ALL</button>
@@ -94,7 +94,7 @@
                             <td>{{ f.modified }}</td>
                             <td>{{ f.size }}</td>
                             <td style="white-space:nowrap;">
-                                <a href="/hq/download-file?filename={{ f.name }}" class="hq-btn-delete" style="margin-right:4px;">DOWNLOAD</a>
+                                <a href="/hq/download-file?filename={{ f.name }}" class="hq-btn-delete hq-btn-download" style="margin-right:4px;">DOWNLOAD</a>
                                 <form method="POST" action="/hq/delete-file" style="display:inline;margin:0;">
                                     <input type="hidden" name="filename" value="{{ f.name }}">
                                     <button type="submit" class="hq-btn-delete" onclick="return confirm('Delete {{ f.name }}?')">DELETE</button>

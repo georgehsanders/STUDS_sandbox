@@ -31,14 +31,13 @@
     </div>
     <div class="hq-summary-cell">
         <div class="hq-summary-label">SKU List</div>
-        <div class="hq-summary-value-sm" id="sku-list-name">{{ data.sku_list_filename or 'None' }}</div>
-        <div class="hq-summary-sub" id="sku-count">{{ data.sku_count }} SKUs</div>
+        <div class="hq-summary-value-sm" id="sku-list-name">{{ data.sku_list_filename or 'None' }} <span style="color:#e8b4f8;">({{ data.sku_count }})</span></div>
     </div>
     <div class="hq-summary-cell hq-summary-cell-last">
         <div class="hq-summary-label">Audit Date Range</div>
         <div class="hq-summary-value-sm" id="audit-range">
             {% if data.audit_date_min %}
-                {{ data.audit_date_min }} &rarr; {{ data.audit_date_max }}
+                {{ data.audit_date_min[:10] }} &rarr; {{ data.audit_date_max[:10] }}
             {% else %}
                 N/A
             {% endif %}

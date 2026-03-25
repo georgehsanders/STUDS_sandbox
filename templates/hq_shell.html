@@ -10,18 +10,18 @@
 
     <header class="hq-spa-header">
         <div class="hq-zone1">
-            <nav class="hq-z1-left">
-                <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
-                <span class="hq-pipe">|</span>
-                <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
-                <span class="hq-pipe">|</span>
-                <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
-            </nav>
-            <div class="hq-z1-center">
-                <a href="/hq/" class="hq-logo-link">STUDS</a>
-                <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
-            </div>
-            <div class="hq-z1-right">
+            <div class="hq-zone1-top">
+                <nav class="hq-z1-left">
+                    <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
+                    <span class="hq-pipe">|</span>
+                    <a href="/hq/goto-studio" class="hq-portal-link">STUDIO</a>
+                    <span class="hq-pipe">|</span>
+                    <a href="/hq/logout" class="hq-portal-link">LOGOUT</a>
+                </nav>
+                <div class="hq-z1-center">
+                    <a href="/hq/" class="hq-logo-link">STUDS</a>
+                    <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
+                </div>
                 <nav class="hq-z1-right-nav">
                     <a href="/hq/upload" class="hq-portal-link">FILES</a>
                     <span class="hq-pipe">|</span>
@@ -29,6 +29,8 @@
                     <span class="hq-pipe">|</span>
                     <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
                 </nav>
+            </div>
+            <div class="hq-zone1-bottom">
                 <div class="hq-timestamp-box">
                     <span class="hq-timestamp-label">UPDATED</span>
                     <span id="last-loaded">{{ data.last_loaded }}</span>
@@ -142,7 +144,7 @@
             var sorted = pairs.slice().sort(function(a, b) {
                 if (sortVal === 'store_id') return parseInt(a.row.getAttribute('data-store-id')) - parseInt(b.row.getAttribute('data-store-id'));
                 if (sortVal === 'status') {
-                    var order = {'Discrepancy Detected':0,'Incomplete — Missing File':1,'Incomplete — Unrecognized File Format':1,'Updated':2};
+                    var order = {'Discrepancy Detected':0,'Incomplete (missing file)':1,'Incomplete (unrecognized file format)':1,'Updated':2};
                     return (order[a.row.getAttribute('data-status')]||3) - (order[b.row.getAttribute('data-status')]||3);
                 }
                 if (sortVal === 'discrepancy_count') return parseInt(b.row.getAttribute('data-discrepancy-count')) - parseInt(a.row.getAttribute('data-discrepancy-count'));
@@ -225,16 +227,15 @@
             var status = row ? (row.dataset.status || '') : '';
             var dotClass = getDotClass(status);
             var statusText = status || 'No data';
+            var rd = (typeof storeReconData !== 'undefined' && storeReconData[storeId]) ? storeReconData[storeId] : {};
 
             var leftCol = '<div class="hq-profile-col-left">' +
                 '<span class="hq-summary-label">COUNT STATUS</span>' +
-                '<div style="margin-top:4px;"><span class="hq-count-dot ' + dotClass + '"></span> ' + statusText + '</div>';
-            if (status === 'Updated') {
-                leftCol += '<p class="hq-muted-text" style="margin-top:8px;color:#4a9e5c;">All SKUs reconciled.</p>';
-            } else if (status.indexOf('Incomplete') === 0) {
-                leftCol += '<p class="hq-muted-text" style="margin-top:8px;">' + status + '</p>';
-            }
-            leftCol += '</div>';
+                '<div style="margin-top:4px;"><span class="hq-count-dot ' + dotClass + '"></span> ' + statusText + '</div>' +
+                '<div style="margin-top:12px;"><span class="hq-summary-label">ASSIGNED SKUS</span><div>' + (rd.active_sku_count != null ? rd.active_sku_count : '—') + '</div></div>' +
+                '<div style="margin-top:8px;"><span class="hq-summary-label">DISCREPANCIES</span><div>' + (rd.discrepancy_count != null ? rd.discrepancy_count : '—') + '</div></div>' +
+                '<div style="margin-top:8px;"><span class="hq-summary-label">NET DISCREPANCY</span><div>' + (rd.net_discrepancy != null ? rd.net_discrepancy : '—') + '</div></div>' +
+                '</div>';
 
             var rightCol = '<div class="hq-profile-col-right">' +
                 '<div><span class="hq-summary-label">TIME</span><div id="profile-time">' + getLocalTime(store.timezone) + '</div></div>' +

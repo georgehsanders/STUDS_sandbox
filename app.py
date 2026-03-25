@@ -31,8 +31,8 @@ ARCHIVE_DB = os.path.join(DATABASE_DIR, 'archive.db')
 # --- Status constants ---
 STATUS_UPDATED = "Updated"
 STATUS_DISCREPANCY = "Discrepancy Detected"
-STATUS_INCOMPLETE = "Incomplete — Missing File"
-STATUS_INCOMPLETE_FORMAT = "Incomplete — Unrecognized File Format"
+STATUS_INCOMPLETE = "Incomplete (missing file)"
+STATUS_INCOMPLETE_FORMAT = "Incomplete (unrecognized file format)"
 
 # --- Default email template ---
 DEFAULT_EMAIL_BODY = (
@@ -932,9 +932,16 @@ def hq_section_studios():
     db_stores = get_all_stores_db()
     results = run_reconciliation()
     recon_status = {}
+    recon_data = {}
     for s in results.get('stores', []):
         recon_status[s['store_id']] = s['status']
-    return render_template('fragments/studios.html', db_stores=db_stores, recon_status=recon_status)
+        recon_data[s['store_id']] = {
+            'status': s['status'],
+            'active_sku_count': s.get('active_sku_count', 0),
+            'discrepancy_count': s.get('discrepancy_count', 0),
+            'net_discrepancy': s.get('net_discrepancy', 0),
+        }
+    return render_template('fragments/studios.html', db_stores=db_stores, recon_status=recon_status, recon_data=recon_data)
 
 
 @app.route('/hq/database/upload-msf', methods=['POST'])
