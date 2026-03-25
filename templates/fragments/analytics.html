@@ -203,4 +203,42 @@ function scrollToSection(id) {
         }
     });
 })();
+
+// Sticky sub-nav via JS (position:sticky doesn't work inside SPA content div)
+(function() {
+    var subnav = document.querySelector('.hq-analytics-subnav');
+    if (!subnav) return;
+    var originalTop = subnav.getBoundingClientRect().top + window.pageYOffset;
+    var headerEl = document.querySelector('.hq-spa-header');
+    var headerHeight = headerEl ? headerEl.offsetHeight : 160;
+    var placeholder = document.createElement('div');
+    placeholder.style.height = subnav.offsetHeight + 'px';
+    placeholder.style.display = 'none';
+    subnav.parentNode.insertBefore(placeholder, subnav);
+    function onScroll() {
+        if (window.pageYOffset + headerHeight >= originalTop) {
+            subnav.style.position = 'fixed';
+            subnav.style.top = headerHeight + 'px';
+            subnav.style.left = '0';
+            subnav.style.right = '0';
+            subnav.style.zIndex = '90';
+            subnav.style.background = '#ffffff';
+            subnav.style.borderBottom = '1px solid #e0e0e0';
+            subnav.style.padding = '10px 32px';
+            placeholder.style.display = 'block';
+        } else {
+            subnav.style.position = '';
+            subnav.style.top = '';
+            subnav.style.left = '';
+            subnav.style.right = '';
+            subnav.style.zIndex = '';
+            subnav.style.background = '';
+            subnav.style.borderBottom = '';
+            subnav.style.padding = '';
+            placeholder.style.display = 'none';
+        }
+    }
+    window.addEventListener('scroll', onScroll);
+    onScroll();
+})();
 </script>

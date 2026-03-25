@@ -2496,10 +2496,7 @@ body.hq-body .settings-textarea {
     justify-content: center;
     align-items: center;
     gap: 10px;
-    position: sticky;
-    top: 0;
     background: #ffffff;
-    z-index: 50;
     padding: 12px 0;
     border-bottom: 1px solid #e0e0e0;
     margin-bottom: 24px;

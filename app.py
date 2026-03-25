@@ -691,14 +691,15 @@ def run_reconciliation():
 
     can_reconcile = (bool(weekly_skus) or sku_bypass) and len(scan.get('audit_trails', [])) > 0
 
-    all_store_ids = set(scan['variance_files'].keys())
-    for row in audit_rows:
-        wh = row['warehouse']
-        if wh:
-            all_store_ids.add(wh)
+    # Always use the full seeded store list as the source of truth
+    all_stores_db = get_all_stores_db()
+    db_store_names = {s['store_id']: s['name'] for s in all_stores_db}
+    all_store_ids = {s['store_id'] for s in all_stores_db}
+    # Also include any variance files that exist but aren't in the DB (edge case)
+    all_store_ids.update(scan['variance_files'].keys())
 
     for store_id in sorted(all_store_ids, key=lambda x: x.zfill(10) if x.isdigit() else x):
-        store_name = store_names.get(store_id, store_id)
+        store_name = db_store_names.get(store_id) or store_names.get(store_id, store_id)
 
         if store_id not in scan['variance_files']:
             stores.append({
