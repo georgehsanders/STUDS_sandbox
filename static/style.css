@@ -1771,20 +1771,15 @@ body.hq-body .settings-textarea {
 .hq-zone1 {
     display: flex;
     flex-direction: column;
-    padding: 20px 32px 8px 32px;
+    padding: 20px 32px 10px 32px;
     width: 100%;
 }
 
-.hq-zone1-top {
+.hq-z1-top {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-}
-
-.hq-zone1-bottom {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 6px;
+    width: 100%;
 }
 
 .hq-z1-left {
@@ -1801,25 +1796,51 @@ body.hq-body .settings-textarea {
 
 .hq-z1-right {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
-    justify-content: center;
-}
-
-.hq-z1-right-nav {
-    display: flex;
     align-items: center;
     gap: 10px;
+    justify-content: flex-end;
 }
 
-.hq-logotype {
+.hq-z1-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.hq-z1-bottom-left {
+    min-width: 0;
+}
+
+.hq-z1-bottom-right {
+    margin-left: auto;
+}
+
+.hq-user-name {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 62px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
     color: #1a1a1a;
-    line-height: 1;
+}
+
+.hq-timestamp {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    color: #1a1a1a;
+}
+
+.hq-timestamp strong {
+    font-weight: 700;
+}
+
+.hq-timestamp-box {
+    border: none;
+    padding: 0;
+    background: none;
 }
 
 .hq-confidential-sub {
@@ -1830,12 +1851,6 @@ body.hq-body .settings-textarea {
     text-transform: uppercase;
     color: #1a1a1a;
     margin-top: 4px;
-}
-
-.hq-timestamp-label {
-    font-weight: 700;
-    margin-right: 6px;
-    letter-spacing: 0.1em;
 }
 
 .hq-pipe {
@@ -2146,5 +2161,71 @@ body.hq-body .settings-textarea {
 }
 
 .hq-btn-download:hover {
+    text-decoration: underline;
+}
+
+/* --- Summary bar 5-column layout --- */
+
+.hq-summary-bar-5col {
+    grid-template-columns: repeat(4, 1fr) auto;
+}
+
+.hq-summary-info-block {
+    border-left: 1px solid #e0e0e0;
+    border-right: none;
+    padding: 18px 24px;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hq-info-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* --- Branded action buttons --- */
+
+.hq-btn-lime-link {
+    display: inline-flex;
+    align-items: center;
+    background: #c8f135;
+    color: #000000;
+    border: 1.5px solid #000000;
+    border-radius: 0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0 18px;
+    height: 34px;
+    text-decoration: none;
+}
+
+.hq-btn-lime-link:hover {
+    text-decoration: underline;
+}
+
+.hq-btn-lavender-link {
+    display: inline-flex;
+    align-items: center;
+    background: #e8b4f8;
+    color: #000000;
+    border: 1.5px solid #000000;
+    border-radius: 0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0 18px;
+    height: 34px;
+    text-decoration: none;
+}
+
+.hq-btn-lavender-link:hover {
     text-decoration: underline;
 }

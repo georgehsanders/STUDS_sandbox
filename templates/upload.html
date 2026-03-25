@@ -9,7 +9,7 @@
 <body class="hq-body">
     <header class="hq-spa-header">
         <div class="hq-zone1">
-            <div class="hq-zone1-top">
+            <div class="hq-z1-top">
                 <nav class="hq-z1-left">
                     <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
                     <span class="hq-pipe">|</span>
@@ -21,18 +21,22 @@
                     <a href="/hq/" class="hq-logo-link">STUDS</a>
                     <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
                 </div>
-                <nav class="hq-z1-right-nav">
+                <nav class="hq-z1-right">
                     <span class="hq-portal-link hq-current">FILES</span>
                     <span class="hq-pipe">|</span>
                     <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
                 </nav>
+            </div>
+            <div class="hq-z1-bottom">
+                <div class="hq-z1-bottom-left"></div>
+                <div class="hq-z1-bottom-right"></div>
             </div>
         </div>
         <hr class="hq-header-rule">
         <div class="hq-zone2">
             <div class="hq-z2-spacer"></div>
             <nav class="hq-section-nav">
-                <a href="/hq/" class="hq-section-link">DASHBOARD</a>
+                <a href="/hq/?section=dashboard" class="hq-section-link">DASHBOARD</a>
                 <span class="hq-pipe">|</span>
                 <a href="/hq/?section=analytics" class="hq-section-link">ANALYTICS</a>
                 <span class="hq-pipe">|</span>
@@ -45,7 +49,6 @@
     </header>
 
     <div class="hq-page-content">
-
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="hq-warnings">
@@ -62,7 +65,7 @@
             <form method="POST" enctype="multipart/form-data" class="hq-upload-form">
                 <input type="file" name="files" multiple accept=".csv" required>
                 <button type="submit" class="hq-btn hq-btn-lavender">UPLOAD</button>
-                <a href="/hq/" class="hq-return-link">RETURN TO DASHBOARD</a>
+                <a href="/hq/" class="hq-btn hq-btn-lime-link">RETURN TO DASHBOARD</a>
             </form>
         </div>
 
@@ -104,7 +107,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
-                <div id="bulk-actions" style="display:none;margin-top:12px;display:flex;gap:10px;">
+                <div id="bulk-actions" style="display:none;margin-top:12px;">
                     <button type="submit" formaction="/hq/download-selected" class="hq-btn hq-btn-outline">DOWNLOAD SELECTED</button>
                     <button type="submit" formaction="/hq/delete-selected" class="hq-btn hq-btn-outline" onclick="return confirm('Delete selected files?')">DELETE SELECTED</button>
                 </div>
@@ -113,26 +116,18 @@
             <p class="hq-no-disc">No files found in /input/.</p>
             {% endif %}
         </div>
-
     </div>
 
     <script>
         var selectMode = false;
         function toggleSelectMode() {
             selectMode = !selectMode;
-            document.querySelectorAll('.hq-select-col').forEach(function(el) {
-                el.style.display = selectMode ? '' : 'none';
-            });
+            document.querySelectorAll('.hq-select-col').forEach(function(el) { el.style.display = selectMode ? '' : 'none'; });
             document.getElementById('bulk-actions').style.display = selectMode ? 'flex' : 'none';
             document.getElementById('select-mode-btn').textContent = selectMode ? 'CANCEL SELECT' : 'SELECT FILES';
-            if (!selectMode) {
-                document.getElementById('select-all').checked = false;
-                document.querySelectorAll('.file-cb').forEach(function(cb) { cb.checked = false; });
-            }
+            if (!selectMode) { document.getElementById('select-all').checked = false; document.querySelectorAll('.file-cb').forEach(function(cb) { cb.checked = false; }); }
         }
-        function toggleSelectAll(master) {
-            document.querySelectorAll('.file-cb').forEach(function(cb) { cb.checked = master.checked; });
-        }
+        function toggleSelectAll(m) { document.querySelectorAll('.file-cb').forEach(function(cb) { cb.checked = m.checked; }); }
     </script>
 </body>
 </html>

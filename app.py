@@ -141,8 +141,35 @@ def init_store_db():
         conn.execute("ALTER TABLE stores ADD COLUMN manager TEXT DEFAULT ''")
     if 'phone' not in existing:
         conn.execute("ALTER TABLE stores ADD COLUMN phone TEXT DEFAULT ''")
+    # Create hq_users table
+    conn.execute('''CREATE TABLE IF NOT EXISTS hq_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        email TEXT DEFAULT '',
+        is_admin INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    # Seed Jasmine's account if not present
+    if not conn.execute("SELECT 1 FROM hq_users WHERE username = 'jasmine.vu'").fetchone():
+        pw_hash = bcrypt.hashpw('lilbamboo'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        conn.execute(
+            "INSERT INTO hq_users (username, password_hash, display_name, email) VALUES (?, ?, ?, ?)",
+            ('jasmine.vu', pw_hash, 'Jasmine Vu', 'jasmine.vu@studs.com')
+        )
     conn.commit()
     conn.close()
+
+
+def get_hq_user(username):
+    """Look up an HQ user by username. Returns a dict or None."""
+    conn = get_db()
+    row = conn.execute('SELECT * FROM hq_users WHERE username = ?', (username,)).fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
 
 
 def get_store_by_username(username):
@@ -856,9 +883,15 @@ def hq_login():
         if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
             session['hq_logged_in'] = True
             session['is_admin'] = True
+            session['display_name'] = ''
             return redirect(url_for('hq_index'))
-        else:
-            flash('Incorrect username or password.', 'error')
+        hq_user = get_hq_user(username)
+        if hq_user and check_password(hq_user['password_hash'], password):
+            session['hq_logged_in'] = True
+            session['is_admin'] = True
+            session['display_name'] = hq_user['display_name']
+            return redirect(url_for('hq_index'))
+        flash('Incorrect username or password.', 'error')
     return render_template('hq_login.html')
 
 
@@ -873,7 +906,7 @@ def hq_logout():
 def hq_index():
     results = run_reconciliation()
     db_stores = get_all_stores_db()
-    return render_template('hq_shell.html', data=results, db_stores=db_stores)
+    return render_template('hq_shell.html', data=results, db_stores=db_stores, current_user_name=session.get('display_name', ''))
 
 
 @app.route('/hq/refresh', methods=['POST'])

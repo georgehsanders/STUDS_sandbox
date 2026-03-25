@@ -10,7 +10,7 @@
 
     <header class="hq-spa-header">
         <div class="hq-zone1">
-            <div class="hq-zone1-top">
+            <div class="hq-z1-top">
                 <nav class="hq-z1-left">
                     <a href="/hq/" class="hq-portal-link hq-current">HQ</a>
                     <span class="hq-pipe">|</span>
@@ -22,7 +22,7 @@
                     <a href="/hq/" class="hq-logo-link">STUDS</a>
                     <div class="hq-confidential-sub">(CONFIDENTIAL)</div>
                 </div>
-                <nav class="hq-z1-right-nav">
+                <nav class="hq-z1-right">
                     <a href="/hq/upload" class="hq-portal-link">FILES</a>
                     <span class="hq-pipe">|</span>
                     <button class="hq-portal-link hq-portal-btn" id="refresh-btn" onclick="doRefresh();">REFRESH</button>
@@ -30,10 +30,14 @@
                     <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
                 </nav>
             </div>
-            <div class="hq-zone1-bottom">
-                <div class="hq-timestamp-box">
-                    <span class="hq-timestamp-label">UPDATED</span>
-                    <span id="last-loaded">{{ data.last_loaded }}</span>
+            <div class="hq-z1-bottom">
+                <div class="hq-z1-bottom-left">
+                    {% if current_user_name %}
+                    <span class="hq-user-name">{{ current_user_name }}</span>
+                    {% endif %}
+                </div>
+                <div class="hq-z1-bottom-right">
+                    <span class="hq-timestamp"><strong>UPDATED:</strong> <span id="last-loaded">{{ data.last_loaded }}</span></span>
                 </div>
             </div>
         </div>
