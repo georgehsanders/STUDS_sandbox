@@ -14,14 +14,21 @@
             <span class="studio-logotype">STUDS</span>
             <span class="studio-header-rule"></span>
             <span class="studio-header-label">STUDIO</span>
+            <span class="studio-header-rule"></span>
+            <span class="studio-header-label">CONFIDENTIAL</span>
         </div>
         <div class="studio-header-right">
             {% if sku_list_filename %}
             <span class="studio-filename">{{ sku_list_filename }}</span>
             {% endif %}
+            {% if not no_sku_list %}
+            <button class="studio-btn-print" onclick="handlePrint()">PRINT</button>
+            {% endif %}
             <a href="/studio/logout" class="studio-nav-link">LOGOUT</a>
         </div>
     </header>
+
+    <div class="studio-print-header">STUDS</div>
 
     {% if no_sku_list %}
     <div class="studio-empty">
@@ -54,6 +61,27 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Print Options Modal -->
+    <div id="studio-print-modal" class="studio-print-modal" style="display:none;">
+        <div class="studio-print-modal-content">
+            <div class="studio-print-modal-header">
+                <h2>Print Options</h2>
+                <button class="studio-print-modal-close" onclick="closePrintModal()">&times;</button>
+            </div>
+            <div class="studio-print-modal-body">
+                <button class="studio-print-modal-btn" onclick="executePrint('all')">
+                    PRINT ALL <span id="print-all-count"></span> SKUS
+                </button>
+                <button class="studio-print-modal-btn" onclick="executePrint('filtered')">
+                    PRINT <span id="print-filtered-count"></span> MATCHING SKUS
+                </button>
+                <div class="studio-print-modal-cancel">
+                    <a href="#" onclick="event.preventDefault(); closePrintModal();">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         var totalSkus = {{ sku_items|length }};
@@ -94,6 +122,61 @@
                 countEl.textContent = totalSkus + ' SKUs assigned this week — ' + skuListFilename;
             }
         }
+
+        function getVisibleCount() {
+            var cards = document.querySelectorAll('.studio-card');
+            var visible = 0;
+            cards.forEach(function(card) {
+                if (card.style.display !== 'none') visible++;
+            });
+            return visible;
+        }
+
+        function handlePrint() {
+            var searchVal = document.getElementById('studio-search').value.trim();
+            if (!searchVal) {
+                executePrint('all');
+            } else {
+                document.getElementById('print-all-count').textContent = totalSkus;
+                document.getElementById('print-filtered-count').textContent = getVisibleCount();
+                document.getElementById('studio-print-modal').style.display = 'flex';
+            }
+        }
+
+        function closePrintModal() {
+            document.getElementById('studio-print-modal').style.display = 'none';
+        }
+
+        function executePrint(mode) {
+            closePrintModal();
+            document.body.setAttribute('data-print-mode', mode);
+
+            if (mode === 'all') {
+                // Temporarily show all cards
+                var cards = document.querySelectorAll('.studio-card');
+                var hiddenCards = [];
+                cards.forEach(function(card) {
+                    if (card.style.display === 'none') {
+                        hiddenCards.push(card);
+                        card.style.display = '';
+                    }
+                });
+                window.print();
+                // Restore hidden state
+                hiddenCards.forEach(function(card) {
+                    card.style.display = 'none';
+                });
+            } else {
+                window.print();
+            }
+
+            document.body.removeAttribute('data-print-mode');
+        }
+
+        // Close modal on outside click
+        document.getElementById('studio-print-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePrintModal();
+        });
     </script>
 </body>
 </html>
