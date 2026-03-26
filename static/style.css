@@ -1222,6 +1222,10 @@ body.hq-body #refresh-btn:disabled {
     font-size: 13px;
 }
 
+.hq-section-nav > :last-child {
+    margin-right: -0.12em;
+}
+
 .hq-section-link.active {
     text-decoration: underline;
 }
