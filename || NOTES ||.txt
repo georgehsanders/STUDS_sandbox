@@ -1,0 +1,2 @@
+PATH:
+cd ~/Documents/Code/STUDS && claude
