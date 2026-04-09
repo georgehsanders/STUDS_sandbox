@@ -6,6 +6,11 @@
     <title>STUDS — Studio</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        .studio-grid { grid-template-columns: repeat(5, 1fr); }
+        @media (max-width: 1024px) { .studio-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 600px) { .studio-grid { grid-template-columns: 1fr; } }
+    </style>
 </head>
 <body class="studio-body">
 
