@@ -286,6 +286,17 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Download selected: creates a ZIP file named `STUDS_files_YYYYMMDD_HHMMSS.zip` containing the selected files
 - [ ] Delete selected: deletes only the checked files, shows count in flash message
 
+### OmniCounts File Generator (on Files page)
+- [ ] Form with file input (accepts `.csv`), store number text field, and GENERATE button
+- [ ] Store number validated client-side (digits only) and server-side
+- [ ] Upload a Brightpearl full inventory summary CSV
+- [ ] Filters uploaded CSV to only SKUs present in the current weekly SKU list (via `scan_input_files()` and `load_sku_list()`)
+- [ ] RS-prefixed SKUs are excluded
+- [ ] Missing SKUs (in weekly list but not in CSV) are appended as placeholder rows with `0` for numeric columns and descriptions from `SKU_Master.csv`
+- [ ] Returns a download named `{store_number}_OnHands.csv`
+- [ ] Flash error if no weekly SKU list file exists in `/input/`
+- [ ] Flash error if uploaded CSV has no SKU column
+
 ---
 
 ## HQ Database (`/hq/?section=database`)
@@ -393,6 +404,22 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Cancel link closes the modal
 - [ ] Clicking outside the modal closes it
 - [ ] Print-specific stylesheet shows a "STUDS" header visible only on paper
+
+### OmniCounts Page (`/studio/omnicounts`)
+- [ ] Dedicated page accessible via OMNICOUNTS navlink in the Studio header (lavender button, left of PRINT)
+- [ ] OMNICOUNTS navlink is always visible (not conditional on SKU list existence)
+- [ ] Header matches Studio main page layout (left: HQ/LOGOUT, center: STUDS logo, right: STUDIO link back)
+- [ ] Sub-header label shows "OMNICOUNTS" instead of "STUDIO"
+- [ ] Form with file input (accepts `.csv`), store number text field, and GENERATE button
+- [ ] Store number validated client-side (digits only) and server-side
+- [ ] Upload a Brightpearl full inventory summary CSV
+- [ ] Filters uploaded CSV to only SKUs present in the current weekly SKU list (via `scan_input_files()` and `load_sku_list()`)
+- [ ] RS-prefixed SKUs are excluded
+- [ ] Missing SKUs (in weekly list but not in CSV) are appended as placeholder rows with `0` for numeric columns and descriptions from `SKU_Master.csv`
+- [ ] Returns a download named `{store_number}_OnHands.csv`
+- [ ] Flash error if no weekly SKU list file exists in `/input/`
+- [ ] Flash error if uploaded CSV has no SKU column
+- [ ] Generation logic is identical to the HQ version (shared helper function)
 
 ---
 

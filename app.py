@@ -483,6 +483,31 @@ def studio_index():
                            no_sku_list=no_sku_list)
 
 
+@app.route('/studio/omnicounts', methods=['GET', 'POST'])
+@studio_login_required
+def studio_omnicounts():
+    if request.method == 'GET':
+        return render_template('studio_omnicounts.html')
+
+    store_number = request.form.get('store_number', '').strip()
+    if not store_number or not store_number.isdigit():
+        flash('Store number must be numeric.', 'error')
+        return redirect(url_for('studio_omnicounts'))
+
+    bp_file = request.files.get('bp_file')
+    if not bp_file or not bp_file.filename:
+        flash('Please upload a Brightpearl inventory CSV.', 'error')
+        return redirect(url_for('studio_omnicounts'))
+
+    error, result = _generate_omnicounts(store_number, bp_file)
+    if error:
+        flash(error, 'error')
+        return redirect(url_for('studio_omnicounts'))
+
+    result_bytes, download_name = result
+    return send_file(result_bytes, mimetype='text/csv', as_attachment=True, download_name=download_name)
+
+
 # --- HQ portal ---
 
 @app.route('/hq/login', methods=['GET', 'POST'])
@@ -734,6 +759,110 @@ def hq_upload():
                 else:
                     global_files.append(finfo)
     return render_template('upload.html', global_files=global_files, variance_files=variance_files)
+
+
+def _generate_omnicounts(store_number, bp_file):
+    """Shared OmniCounts generation logic.
+
+    Returns (error_message, None) on failure or (None, (bytes_io, filename)) on success.
+    """
+    scan = scan_input_files()
+    if not scan['sku_lists']:
+        return ('No weekly SKU list file found in /input/. Upload one before generating.', None)
+
+    sku_list_filename = scan['sku_lists'][0][0]
+    weekly_skus = load_sku_list(os.path.join(INPUT_DIR, sku_list_filename))
+
+    raw_bytes = bp_file.read()
+    text = clean_csv_content(raw_bytes)
+    reader = csv.DictReader(io.StringIO(text))
+    reader.fieldnames = [h.strip() for h in reader.fieldnames]
+
+    fieldnames = list(reader.fieldnames)
+
+    sku_col = None
+    product_id_col = None
+    product_name_col = None
+    options_col = None
+    for h in fieldnames:
+        hl = h.lower()
+        if hl == 'sku' and sku_col is None:
+            sku_col = h
+        elif hl == 'product id' and product_id_col is None:
+            product_id_col = h
+        elif hl == 'product name' and product_name_col is None:
+            product_name_col = h
+        elif hl == 'options' and options_col is None:
+            options_col = h
+    if sku_col is None:
+        return ('Uploaded CSV has no SKU column.', None)
+    text_cols = {sku_col, product_id_col, product_name_col, options_col} - {None}
+
+    matched_rows = []
+    seen_skus = set()
+    for row in reader:
+        out = {}
+        for col in fieldnames:
+            val = row.get(col)
+            out[col] = val.strip() if val else ''
+        sku_val = out[sku_col]
+        if sku_val and not is_excluded_sku(sku_val) and sku_val in weekly_skus:
+            matched_rows.append(out)
+            seen_skus.add(sku_val)
+
+    sku_master_desc = {}
+    sku_master_path = os.path.join(MASTER_DIR, 'SKU_Master.csv')
+    if os.path.isfile(sku_master_path):
+        master_rows = parse_csv(sku_master_path)
+        for row in master_rows:
+            s = row.get('sku', '').strip()
+            if s:
+                sku_master_desc[s] = row.get('description', '').strip()
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in matched_rows:
+        writer.writerow(row)
+    for sku in sorted(weekly_skus - seen_skus):
+        fill_row = {}
+        for col in fieldnames:
+            if col == sku_col:
+                fill_row[col] = sku
+            elif col == product_name_col:
+                fill_row[col] = sku_master_desc.get(sku, '')
+            elif col in text_cols:
+                fill_row[col] = ''
+            else:
+                fill_row[col] = '0'
+        writer.writerow(fill_row)
+
+    output.seek(0)
+    result_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+    download_name = f'{store_number}_OnHands.csv'
+    return (None, (result_bytes, download_name))
+
+
+@app.route('/hq/generate-omnicounts', methods=['POST'])
+@hq_login_required
+def hq_generate_omnicounts():
+    store_number = request.form.get('store_number', '').strip()
+    if not store_number or not store_number.isdigit():
+        flash('Store number must be numeric.', 'error')
+        return redirect(url_for('hq_upload'))
+
+    bp_file = request.files.get('bp_file')
+    if not bp_file or not bp_file.filename:
+        flash('Please upload a Brightpearl inventory CSV.', 'error')
+        return redirect(url_for('hq_upload'))
+
+    error, result = _generate_omnicounts(store_number, bp_file)
+    if error:
+        flash(error, 'error')
+        return redirect(url_for('hq_upload'))
+
+    result_bytes, download_name = result
+    return send_file(result_bytes, mimetype='text/csv', as_attachment=True, download_name=download_name)
 
 
 @app.route('/hq/delete-file', methods=['POST'])
