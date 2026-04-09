@@ -309,6 +309,27 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] After upload, image/SKU audit runs automatically
 - [ ] Flash message confirms update with count of SKUs added and removed
 
+### SKU Status File Section
+- [ ] Positioned below Master SKU File and above Product Images
+- [ ] Displays: filename (SKU_Status.csv), SKU count, last updated timestamp (or dash if not present)
+- [ ] File upload input accepts `.csv` files
+- [ ] UPLOAD button submits the new status file
+- [ ] Old status file is archived before overwrite (file_type 'sku_status')
+- [ ] Flash message confirms update with count of SKUs loaded
+- [ ] Expected upload filename pattern: SKU_STATUS_MM.DD.YY.csv
+- [ ] Canonical storage path: /database/master/SKU_Status.csv
+- [ ] Expected columns: sku, status (values: "active" or "sunset", case-insensitive)
+
+### SKU Prices File Section
+- [ ] Positioned below SKU Status File and above Product Images
+- [ ] Displays: filename (SKU_Prices.csv), SKU count, last updated timestamp (or dash if not present)
+- [ ] File upload input accepts `.csv` files
+- [ ] UPLOAD button submits the new prices file
+- [ ] Old prices file is archived before overwrite (file_type 'sku_prices')
+- [ ] Flash message confirms update with count of SKUs loaded
+- [ ] Canonical storage path: /database/SKU_Prices.csv
+- [ ] Expected columns: sku, retail_price (decimal number, no currency symbol)
+
 ### Product Images Section
 - [ ] Displays count of images in `/database/images/`
 - [ ] File upload input accepts `.jpg, .jpeg, .png, .webp`, supports multiple files
@@ -377,8 +398,14 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 ### Header
 - [ ] Left nav box (lime): LOGOUT (or HQ | LOGOUT if admin user)
 - [ ] Center: STUDS logo with "(CONFIDENTIAL)"
-- [ ] Right nav box (lavender): PRINT button (only shown if SKU list exists)
+- [ ] Right nav box (lavender): OMNICOUNTS | PRINT (PRINT only shown if SKU list exists)
 - [ ] SKU list filename displayed below header
+
+### BEGIN COUNT Button
+- [ ] Lime (#c8f135) bold uppercase button labeled "BEGIN COUNT"
+- [ ] Positioned in the content row below the header, right-aligned, same row as search input
+- [ ] Navigates to `/studio/tutorial`
+- [ ] Only visible when SKU list exists (inside studio-main)
 
 ### Empty State
 - [ ] If no SKU list file exists, displays a message indicating no active SKU list
@@ -395,6 +422,24 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Barcodes generated client-side using JsBarcode (CODE128 format, 28px height, no text)
 - [ ] Cards have data attributes for SKU and description for search filtering
 
+### SKU Status Tags
+- [ ] Each SKU card displays a status tag in the top-right corner of the image area (if status is known)
+- [ ] Status data loaded from /database/master/SKU_Status.csv via `load_sku_status()`
+- [ ] ACTIVE tag: lavender (#e8b4f8) background, black text, label "ACTIVE"
+- [ ] SUNSET tag: lime (#c8f135) background, black text, label "SUNSET"
+- [ ] No tag rendered if SKU is not in the status file or status is not active/sunset
+- [ ] Tags use CSS classes: `.studio-sku-tag`, `.studio-sku-tag-active`, `.studio-sku-tag-sunset`
+
+### Retail Price on Cards
+- [ ] Each SKU card displays the retail price right-aligned in the text area, opposite the SKU/description
+- [ ] Price data loaded from /database/SKU_Prices.csv via `load_sku_prices()`
+- [ ] File columns: sku, retail_price (decimal number, no currency symbol)
+- [ ] Format: "$XX.XX" with dollar sign and two decimal places
+- [ ] If SKU is not in the price file, no price is rendered
+- [ ] SKU lookup is case-insensitive (uppercased for matching)
+- [ ] CSS class: `.studio-sku-price` (bold, 14px, black)
+- [ ] Card info area uses flex layout (`.studio-card-info`) to align SKU/desc left and price right
+
 ### Print Functionality
 - [ ] If no search is active, clicking PRINT immediately calls `window.print()`
 - [ ] If a search filter is active, clicking PRINT opens a print options modal
@@ -404,6 +449,27 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Cancel link closes the modal
 - [ ] Clicking outside the modal closes it
 - [ ] Print-specific stylesheet shows a "STUDS" header visible only on paper
+
+### Begin Count / Tutorial Page (`/studio/tutorial`)
+- [ ] On Studio main page: lime BEGIN COUNT button in content row (right of search bar), navigates to `/studio/tutorial`
+- [ ] On OmniCounts page: BEGIN COUNT navlink in header nav (lavender, left of STUDIO link)
+- [ ] Sub-header label on tutorial page reads "BEGIN COUNT"
+- [ ] Header matches Studio sub-page layout (left: HQ/LOGOUT, center: STUDS logo, right: STUDIO link back)
+- [ ] Sub-header label shows "TUTORIAL"
+- [ ] Single-page multi-step walkthrough; one step visible at a time
+- [ ] Intro screen (no step number): heading "Hey, Stud!", four-item checkbox checklist, begin button
+- [ ] Step 1: Brightpearl Inventory Summary — instructions with numbered sub-list, link to Brightpearl
+- [ ] Step 2: Converting to OmniCounts File — instructions with link to /studio/omnicounts (opens new tab)
+- [ ] Step 3: Data Dumping into Filezilla — placeholder text "(Jasmine to add more details here later...)"
+- [ ] Step 4: Printing SKU List — instructions for printing/scanning barcodes
+- [ ] Step 5: Begin your count — placeholder text
+- [ ] Step 6: Close Out Your Count — placeholder text
+- [ ] Step 7: Reconcile variances — instructions referencing handoffs@omnicounts.com variance email
+- [ ] Step 8: Check for major variances — recount instruction
+- [ ] Step 9: Make adjustments in Brightpearl — final step with completion message, no next button
+- [ ] Clicking next button hides current step and shows next step, scrolls to top
+- [ ] No persistence — refreshing returns to intro
+- [ ] Checkboxes on intro are visual only, no state tracked
 
 ### OmniCounts Page (`/studio/omnicounts`)
 - [ ] Dedicated page accessible via OMNICOUNTS navlink in the Studio header (lavender button, left of PRINT)
@@ -456,3 +522,21 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 
 ### Image Serving
 - [ ] Product images served from `/database/images/<filename>` (no authentication required)
+
+---
+
+## Deployment
+
+### STUDS_DATA_DIR Environment Variable
+- [ ] If `STUDS_DATA_DIR` is set, all mutable data directories are rooted under it:
+  - `INPUT_DIR` → `$STUDS_DATA_DIR/input/`
+  - `DATABASE_DIR` → `$STUDS_DATA_DIR/database/`
+  - `MASTER_DIR` → `$STUDS_DATA_DIR/database/master/`
+  - `IMAGES_DIR` → `$STUDS_DATA_DIR/database/images/`
+  - `PROCESSED_DIR` → `$STUDS_DATA_DIR/processed/`
+  - `STORE_DB` → `$STUDS_DATA_DIR/database/store_profiles.db`
+  - `ARCHIVE_DB` → `$STUDS_DATA_DIR/database/archive.db`
+- [ ] If `STUDS_DATA_DIR` is not set, all paths fall back to repo root (local development default)
+- [ ] `SETTINGS_FILE` always stays at the repo root regardless of `STUDS_DATA_DIR`
+- [ ] On startup (`__main__`), `INPUT_DIR`, `PROCESSED_DIR`, `DATABASE_DIR`, `MASTER_DIR`, and `IMAGES_DIR` are created if they don't exist
+- [ ] Purpose: allows Railway (or similar) to mount a single persistent volume at `STUDS_DATA_DIR` containing all mutable state

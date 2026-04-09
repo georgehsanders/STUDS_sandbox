@@ -813,6 +813,7 @@ body.hq-body #refresh-btn:disabled {
     aspect-ratio: 1 / 1;
     overflow: hidden;
     margin-bottom: 12px;
+    position: relative;
 }
 
 .studio-card-img img {
@@ -835,6 +836,21 @@ body.hq-body #refresh-btn:disabled {
     letter-spacing: 0.05em;
 }
 
+.studio-card-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.studio-sku-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a1a;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .studio-card-sku {
     font-size: 11px;
     font-weight: 600;
@@ -847,7 +863,6 @@ body.hq-body #refresh-btn:disabled {
 .studio-card-desc {
     font-size: 13px;
     color: #555555;
-    margin-bottom: 12px;
 }
 
 .studio-card svg {
@@ -950,6 +965,50 @@ body.hq-body #refresh-btn:disabled {
 .studio-print-modal-cancel a:hover {
     text-decoration: underline;
     color: #1a1a1a;
+}
+
+/* --- SKU status tags --- */
+
+.studio-sku-tag {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 5px 11px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 0;
+    line-height: 1;
+}
+
+.studio-sku-tag-active {
+    background: #e8b4f8;
+    color: #000;
+}
+
+.studio-sku-tag-sunset {
+    background: #c8f135;
+    color: #000;
+}
+
+/* --- Begin Count button --- */
+
+.studio-begin-count-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 14px 32px;
+    white-space: nowrap;
+    border: 1.5px solid #000;
+    border-radius: 0;
+    background: #c8f135;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #000;
+    text-decoration: none;
+    flex-shrink: 0;
 }
 
 /* --- Print header (hidden on screen, shown on print) --- */

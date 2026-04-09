@@ -30,9 +30,12 @@ ADMIN_USERNAME = 'hq'
 ADMIN_PASSWORD = 'hq'
 app.secret_key = 'studs-secret-key-change-in-production'
 
-PROCESSED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'processed')
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
-DATABASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database')
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+_DATA_DIR = os.environ.get('STUDS_DATA_DIR', '').strip()
+
+PROCESSED_DIR = os.path.join(_DATA_DIR, 'processed') if _DATA_DIR else os.path.join(_REPO_ROOT, 'processed')
+SETTINGS_FILE = os.path.join(_REPO_ROOT, 'settings.json')
+DATABASE_DIR = os.path.join(_DATA_DIR, 'database') if _DATA_DIR else os.path.join(_REPO_ROOT, 'database')
 MASTER_DIR = os.path.join(DATABASE_DIR, 'master')
 IMAGES_DIR = os.path.join(DATABASE_DIR, 'images')
 STORE_DB = os.path.join(DATABASE_DIR, 'store_profiles.db')
@@ -270,6 +273,40 @@ def load_master_skus():
     return result
 
 
+def load_sku_status():
+    """Load SKU_Status.csv and return a dict of SKU (uppercase) -> status (lowercase)."""
+    filepath = os.path.join(MASTER_DIR, 'SKU_Status.csv')
+    if not os.path.isfile(filepath):
+        return {}
+    rows = parse_csv(filepath)
+    result = {}
+    for row in rows:
+        sku = row.get('sku', '').strip().upper()
+        status = row.get('status', '').strip().lower()
+        if sku and status in ('active', 'sunset'):
+            result[sku] = status
+    return result
+
+
+def load_sku_prices():
+    """Load SKU_Prices.csv and return a dict of SKU (uppercase) -> retail_price (float)."""
+    filepath = os.path.join(DATABASE_DIR, 'SKU_Prices.csv')
+    if not os.path.isfile(filepath):
+        return {}
+    rows = parse_csv(filepath)
+    result = {}
+    for row in rows:
+        sku = row.get('sku', '').strip().upper()
+        price_str = row.get('retail_price', '').strip()
+        if not sku or not price_str:
+            continue
+        try:
+            result[sku] = float(price_str)
+        except ValueError:
+            continue
+    return result
+
+
 def find_image_for_sku(sku):
     """Find an image file in IMAGES_DIR whose name starts with the SKU (case-insensitive)."""
     if not os.path.isdir(IMAGES_DIR):
@@ -467,20 +504,32 @@ def studio_index():
                 sku_names[sku] = name
 
         master = load_master_skus()
+        sku_status = load_sku_status()
+        sku_prices = load_sku_prices()
 
         for sku in sorted(sku_set):
             desc = master.get(sku.upper(), '') or sku_names.get(sku, '') or sku
             image_filename = find_image_for_sku(sku)
+            status = sku_status.get(sku.upper())
+            price = sku_prices.get(sku.upper())
             sku_items.append({
                 'sku': sku,
                 'description': desc,
                 'image_filename': image_filename,
+                'status': status,
+                'retail_price': price,
             })
 
     return render_template('studio.html',
                            sku_items=sku_items,
                            sku_list_filename=sku_list_filename,
                            no_sku_list=no_sku_list)
+
+
+@app.route('/studio/tutorial')
+@studio_login_required
+def studio_tutorial():
+    return render_template('studio_tutorial.html')
 
 
 @app.route('/studio/omnicounts', methods=['GET', 'POST'])
@@ -590,8 +639,22 @@ def hq_section_database():
     master = load_master_skus()
     for m in missing:
         m['description'] = master.get(m['sku'], '')
+    status_path = os.path.join(MASTER_DIR, 'SKU_Status.csv')
+    status_rows = 0
+    status_updated = 'N/A'
+    if os.path.isfile(status_path):
+        status_rows = len(load_sku_status())
+        status_updated = datetime.fromtimestamp(os.path.getmtime(status_path)).strftime('%Y-%m-%d %H:%M:%S')
+    prices_path = os.path.join(DATABASE_DIR, 'SKU_Prices.csv')
+    prices_count = 0
+    prices_updated = 'N/A'
+    if os.path.isfile(prices_path):
+        prices_count = len(load_sku_prices())
+        prices_updated = datetime.fromtimestamp(os.path.getmtime(prices_path)).strftime('%Y-%m-%d %H:%M:%S')
     return render_template('fragments/database.html',
                            msf_rows=msf_rows, msf_updated=msf_updated,
+                           status_rows=status_rows, status_updated=status_updated,
+                           prices_count=prices_count, prices_updated=prices_updated,
                            image_count=image_count, orphaned=orphaned, missing=missing)
 
 
@@ -625,6 +688,34 @@ def hq_database_upload_msf():
         f.save(msf_path)
         run_image_sku_audit()
         flash('Master SKU file updated.', 'success')
+    return redirect('/hq/?section=database')
+
+
+@app.route('/hq/database/upload-sku-status', methods=['POST'])
+@hq_login_required
+def hq_database_upload_sku_status():
+    status_path = os.path.join(MASTER_DIR, 'SKU_Status.csv')
+    f = request.files.get('status_file')
+    if f and f.filename:
+        archive_file_if_exists(status_path, 'sku_status')
+        os.makedirs(MASTER_DIR, exist_ok=True)
+        f.save(status_path)
+        count = len(load_sku_status())
+        flash(f'SKU Status file updated. {count} SKUs loaded.', 'success')
+    return redirect('/hq/?section=database')
+
+
+@app.route('/hq/database/upload-sku-prices', methods=['POST'])
+@hq_login_required
+def hq_database_upload_sku_prices():
+    prices_path = os.path.join(DATABASE_DIR, 'SKU_Prices.csv')
+    f = request.files.get('prices_file')
+    if f and f.filename:
+        archive_file_if_exists(prices_path, 'sku_prices')
+        os.makedirs(DATABASE_DIR, exist_ok=True)
+        f.save(prices_path)
+        count = len(load_sku_prices())
+        flash(f'SKU Prices file updated. {count} SKUs loaded.', 'success')
     return redirect('/hq/?section=database')
 
 
@@ -1122,6 +1213,26 @@ def hq_database():
                 run_image_sku_audit()
                 flash(f'Master SKU file updated. {len(diff_added)} SKUs added, {len(diff_removed)} SKUs removed.', 'success')
 
+        elif action == 'upload_sku_status':
+            f = request.files.get('status_file')
+            if f and f.filename:
+                status_path = os.path.join(MASTER_DIR, 'SKU_Status.csv')
+                archive_file_if_exists(status_path, 'sku_status')
+                os.makedirs(MASTER_DIR, exist_ok=True)
+                f.save(status_path)
+                count = len(load_sku_status())
+                flash(f'SKU Status file updated. {count} SKUs loaded.', 'success')
+
+        elif action == 'upload_sku_prices':
+            f = request.files.get('prices_file')
+            if f and f.filename:
+                prices_path = os.path.join(DATABASE_DIR, 'SKU_Prices.csv')
+                archive_file_if_exists(prices_path, 'sku_prices')
+                os.makedirs(DATABASE_DIR, exist_ok=True)
+                f.save(prices_path)
+                count = len(load_sku_prices())
+                flash(f'SKU Prices file updated. {count} SKUs loaded.', 'success')
+
         elif action == 'upload_images':
             img_files = request.files.getlist('image_files')
             count = 0
@@ -1162,6 +1273,22 @@ def hq_database():
     for m in missing:
         m['description'] = master.get(m['sku'], '')
 
+    # SKU Status file
+    status_path = os.path.join(MASTER_DIR, 'SKU_Status.csv')
+    status_rows = 0
+    status_updated = 'N/A'
+    if os.path.isfile(status_path):
+        status_rows = len(load_sku_status())
+        status_updated = datetime.fromtimestamp(os.path.getmtime(status_path)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # SKU Prices file
+    prices_path = os.path.join(DATABASE_DIR, 'SKU_Prices.csv')
+    prices_count = 0
+    prices_updated = 'N/A'
+    if os.path.isfile(prices_path):
+        prices_count = len(load_sku_prices())
+        prices_updated = datetime.fromtimestamp(os.path.getmtime(prices_path)).strftime('%Y-%m-%d %H:%M:%S')
+
     # Archive browser
     archives = [dict(r) for r in conn.execute(
         "SELECT id, file_type, original_filename, store_id, archived_at, row_count, file_size_bytes FROM archive_files ORDER BY archived_at DESC LIMIT 50"
@@ -1170,6 +1297,8 @@ def hq_database():
 
     return render_template('database.html',
                            msf_rows=msf_rows, msf_updated=msf_updated,
+                           status_rows=status_rows, status_updated=status_updated,
+                           prices_count=prices_count, prices_updated=prices_updated,
                            image_count=image_count,
                            orphaned=orphaned, missing=missing,
                            archives=archives,
@@ -1233,6 +1362,10 @@ def inject_globals():
 if __name__ == '__main__':
     os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
+    os.makedirs(DATABASE_DIR, exist_ok=True)
+    os.makedirs(MASTER_DIR, exist_ok=True)
+    os.makedirs(IMAGES_DIR, exist_ok=True)
     print(f"[STUDS Stock Check] Input directory: {INPUT_DIR}")
+    print(f"[STUDS Stock Check] Database directory: {DATABASE_DIR}")
     print(f"[STUDS Stock Check] Starting on http://localhost:5000")
     app.run(debug=True, host='127.0.0.1', port=5000)

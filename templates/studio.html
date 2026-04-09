@@ -59,9 +59,12 @@
     </div>
     {% else %}
     <div class="studio-main">
-        <div class="studio-search-bar">
-            <input type="text" id="studio-search" class="studio-search-input" placeholder="Search SKUs or descriptions..." oninput="filterCards()">
-            <p class="studio-sku-count" id="studio-sku-count">{{ sku_items|length }} SKUs assigned this week — {{ sku_list_filename }}</p>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div class="studio-search-bar">
+                <input type="text" id="studio-search" class="studio-search-input" placeholder="Search SKUs or descriptions..." oninput="filterCards()">
+                <p class="studio-sku-count" id="studio-sku-count">{{ sku_items|length }} SKUs assigned this week — {{ sku_list_filename }}</p>
+            </div>
+            <a href="/studio/tutorial" class="studio-begin-count-btn">BEGIN COUNT</a>
         </div>
 
         <div class="studio-grid" id="studio-grid">
@@ -70,14 +73,27 @@
                 {% if item.image_filename %}
                 <div class="studio-card-img">
                     <img src="/database/images/{{ item.image_filename }}" alt="{{ item.sku }}">
+                    {% if item.status %}
+                    <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div class="studio-card-img studio-card-noimg">
                     <span>No image</span>
+                    {% if item.status %}
+                    <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
+                    {% endif %}
                 </div>
                 {% endif %}
-                <div class="studio-card-sku">{{ item.sku }}</div>
-                <div class="studio-card-desc">{{ item.description }}</div>
+                <div class="studio-card-info">
+                    <div>
+                        <div class="studio-card-sku">{{ item.sku }}</div>
+                        <div class="studio-card-desc">{{ item.description }}</div>
+                    </div>
+                    {% if item.retail_price is not none %}
+                    <div class="studio-sku-price">${{ '%.2f'|format(item.retail_price) }}</div>
+                    {% endif %}
+                </div>
                 <svg id="barcode-{{ item.sku }}"></svg>
             </div>
             {% endfor %}
