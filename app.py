@@ -580,6 +580,8 @@ def studio_catalog():
             if os.path.isdir(IMAGES_DIR):
                 for fname in os.listdir(IMAGES_DIR):
                     image_map[fname.lower()] = fname
+            sku_status = load_sku_status()
+            sku_prices = load_sku_prices()
             for row in rows:
                 sku_code = row.get('sku', '').strip().upper()
                 desc = row.get('description', '').strip()
@@ -590,7 +592,13 @@ def studio_catalog():
                         if fname_lower.startswith(sku_lower):
                             img = fname
                             break
-                    skus[sku_code] = {'sku': sku_code, 'description': desc, 'image_filename': img}
+                    skus[sku_code] = {
+                        'sku': sku_code,
+                        'description': desc,
+                        'image_filename': img,
+                        'status': sku_status.get(sku_code),
+                        'retail_price': sku_prices.get(sku_code),
+                    }
             sku_count = len(skus)
         except Exception:
             pass

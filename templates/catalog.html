@@ -6,6 +6,36 @@
     <title>STUDS — SKU Catalog</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        .catalog-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+        }
+        @media (max-width: 1200px) {
+            .catalog-grid { grid-template-columns: repeat(4, 1fr); }
+        }
+        @media (max-width: 800px) {
+            .catalog-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 480px) {
+            .catalog-grid { grid-template-columns: 1fr; }
+        }
+        .catalog-pos-badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            z-index: 2;
+            background: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 9px;
+            font-weight: 400;
+            letter-spacing: 0.08em;
+            padding: 2px 6px;
+            line-height: 1.4;
+        }
+    </style>
 </head>
 <body class="studio-body">
 
@@ -72,7 +102,7 @@
             <input type="text" id="catalog-search" class="studio-search-input" placeholder="Search SKUs or descriptions..." oninput="filterCatalogCards()">
             <p class="studio-sku-count" id="catalog-sku-count"></p>
         </div>
-        <div class="studio-grid" id="catalog-grid"></div>
+        <div class="catalog-grid" id="catalog-grid"></div>
     </div>
 
     <script>
@@ -115,7 +145,7 @@
                         var skuData = catalogSkus[upper] || null;
                         cards.push({
                             position: slot.position,
-                            skuData: skuData ? skuData : { sku: skuCode, description: null, image_filename: null },
+                            skuData: skuData ? skuData : { sku: skuCode, description: null, image_filename: null, status: null, retail_price: null },
                             isInMaster: !!skuData
                         });
                     });
@@ -136,38 +166,67 @@
 
                 var html = '';
 
-                // Image area — wrap in relative div to allow position badge overlay
-                html += '<div style="position:relative;">';
-                if (showBadges && card.position !== null) {
-                    html += '<span style="position:absolute;top:4px;left:4px;z-index:1;background:#1a1a1a;color:#ffffff;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;font-size:9px;font-weight:400;letter-spacing:0.08em;padding:2px 6px;">' + card.position + '</span>';
+                if (!card.isInMaster) {
+                    // Minimal placeholder card
+                    html += '<div class="studio-card-img studio-card-noimg">';
+                    if (showBadges && card.position !== null) {
+                        html += '<span class="catalog-pos-badge">' + card.position + '</span>';
+                    }
+                    html += '<span>No image</span></div>';
+                    html += '<div class="studio-card-info"><div>';
+                    html += '<div class="studio-card-sku">' + escHtml(card.skuData.sku) + '</div>';
+                    html += '<div class="studio-card-desc" style="font-size:11px;color:#999;">Not in master file</div>';
+                    html += '</div></div>';
+                    el.innerHTML = html;
+                    grid.appendChild(el);
+                    return;
                 }
-                if (card.isInMaster && card.skuData.image_filename) {
-                    html += '<div class="studio-card-img"><img src="/database/images/' + escHtml(card.skuData.image_filename) + '" alt="' + escHtml(card.skuData.sku) + '"></div>';
+
+                // Image with optional position badge and status tag
+                if (card.skuData.image_filename) {
+                    html += '<div class="studio-card-img">';
+                    if (showBadges && card.position !== null) {
+                        html += '<span class="catalog-pos-badge">' + card.position + '</span>';
+                    }
+                    html += '<img src="/database/images/' + escHtml(card.skuData.image_filename) + '" alt="' + escHtml(card.skuData.sku) + '">';
+                    if (card.skuData.status) {
+                        html += '<span class="studio-sku-tag studio-sku-tag-' + escHtml(card.skuData.status) + '">' + escHtml(card.skuData.status.toUpperCase()) + '</span>';
+                    }
+                    html += '</div>';
                 } else {
-                    html += '<div class="studio-card-img studio-card-noimg"><span>No image</span></div>';
+                    html += '<div class="studio-card-img studio-card-noimg">';
+                    if (showBadges && card.position !== null) {
+                        html += '<span class="catalog-pos-badge">' + card.position + '</span>';
+                    }
+                    html += '<span>No image</span>';
+                    if (card.skuData.status) {
+                        html += '<span class="studio-sku-tag studio-sku-tag-' + escHtml(card.skuData.status) + '">' + escHtml(card.skuData.status.toUpperCase()) + '</span>';
+                    }
+                    html += '</div>';
+                }
+
+                // Info row: SKU + description on left, price on right
+                html += '<div class="studio-card-info"><div>';
+                html += '<div class="studio-card-sku">' + escHtml(card.skuData.sku) + '</div>';
+                html += '<div class="studio-card-desc">' + escHtml(card.skuData.description || '') + '</div>';
+                html += '</div>';
+                if (card.skuData.retail_price !== null && card.skuData.retail_price !== undefined) {
+                    html += '<div class="studio-sku-price">$' + parseFloat(card.skuData.retail_price).toFixed(2) + '</div>';
                 }
                 html += '</div>';
 
-                // SKU code
-                html += '<div class="studio-card-sku">' + escHtml(card.skuData.sku) + '</div>';
+                // Barcode
+                var bcId = 'bc_' + card.skuData.sku.replace(/[^a-zA-Z0-9]/g, '_') + '_' + idx;
+                html += '<svg id="' + bcId + '"></svg>';
 
-                if (!card.isInMaster) {
-                    // Minimal placeholder — no barcode
-                    html += '<div class="studio-sku-count">Not in master file</div>';
-                    el.innerHTML = html;
-                    grid.appendChild(el);
-                } else {
-                    html += '<div class="studio-card-desc">' + escHtml(card.skuData.description || '') + '</div>';
-                    var bcId = 'bc_' + card.skuData.sku.replace(/[^a-zA-Z0-9]/g, '_') + '_' + idx;
-                    html += '<svg id="' + bcId + '"></svg>';
-                    el.innerHTML = html;
-                    grid.appendChild(el);
-                    try {
-                        JsBarcode('#' + bcId, card.skuData.sku, {
-                            format: 'CODE128', width: 1, height: 28, displayValue: false, margin: 0
-                        });
-                    } catch(e) {}
-                }
+                el.innerHTML = html;
+                grid.appendChild(el);
+
+                try {
+                    JsBarcode('#' + bcId, card.skuData.sku, {
+                        format: 'CODE128', width: 1, height: 28, displayValue: false, margin: 0
+                    });
+                } catch(e) {}
             });
 
             updateCatalogCount();
