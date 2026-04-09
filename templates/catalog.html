@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STUDS — SKU Catalog</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+</head>
+<body class="studio-body">
+
+    <header class="studio-spa-header">
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:20px 32px 10px 32px;width:100%;">
+            <div style="display:flex;justify-content:flex-start;align-items:center;">
+                {% if session.get('is_admin') %}
+                <div style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;border:1.5px solid #000;background:#c8f135;flex-shrink:0;">
+                    <a href="/studio/goto-hq" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">HQ</a>
+                    <span style="color:#666;font-size:11px;">|</span>
+                    <a href="/studio/logout" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">LOGOUT</a>
+                </div>
+                {% else %}
+                <div style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;border:1.5px solid #000;background:#c8f135;flex-shrink:0;">
+                    <a href="/studio/logout" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">LOGOUT</a>
+                </div>
+                {% endif %}
+            </div>
+            <div style="text-align:center;white-space:nowrap;">
+                <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:62px;font-weight:500;letter-spacing:0.01em;color:#1a1a1a;line-height:1;">STUDS</div>
+                <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;letter-spacing:0.14em;text-transform:uppercase;color:#1a1a1a;margin-top:4px;">(CONFIDENTIAL)</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:flex-start;flex-direction:column;gap:6px;">
+                <div style="display:flex;justify-content:flex-end;width:100%;gap:8px;">
+                    <div style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;border:1.5px solid #000;background:#e8b4f8;flex-shrink:0;">
+                        <a href="/studio/" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">STUDIO</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <hr style="border:none;border-top:1.5px solid #000;margin:0;padding:0;width:100%;">
+        <div style="display:flex;justify-content:center;padding:10px 32px;">
+            <span style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#999;">SKU CATALOG</span>
+        </div>
+        <hr style="border:none;border-top:1px solid #e0e0e0;margin:0;padding:0;width:100%;">
+    </header>
+
+    <!-- VIEW 1: Display Picker -->
+    <div id="view-picker" class="studio-main">
+        <p class="studio-sku-count">
+            {% if master_filename %}{{ master_filename }} — {{ sku_count }} SKUs{% else %}No master SKU file loaded{% endif %}
+        </p>
+        <div class="studio-grid">
+            {% for display in displays %}
+            <div class="studio-card" onclick="showDisplay('{{ display.id }}')" style="cursor:pointer;">
+                <div class="studio-card-img">
+                    <img src="/static/display_images/{{ display.name }}.jpg" alt="{{ display.name }}">
+                </div>
+                <div class="studio-card-sku">{{ display.name }}</div>
+            </div>
+            {% endfor %}
+            <div class="studio-card" onclick="showDisplay('all')" style="cursor:pointer;">
+                <div class="studio-card-img studio-card-noimg"></div>
+                <div class="studio-card-sku">ALL SKUS</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW 2: SKU List -->
+    <div id="view-list" class="studio-main" style="display:none;">
+        <a href="#" class="hq-return-link" onclick="showDisplayPicker(); return false;" style="display:inline-block;margin-bottom:16px;">&#8592; Back to Catalog</a>
+        <div class="hq-section-heading" id="view-list-title" style="margin-bottom:20px;"></div>
+        <div class="studio-search-bar">
+            <input type="text" id="catalog-search" class="studio-search-input" placeholder="Search SKUs or descriptions..." oninput="filterCatalogCards()">
+            <p class="studio-sku-count" id="catalog-sku-count"></p>
+        </div>
+        <div class="studio-grid" id="catalog-grid"></div>
+    </div>
+
+    <script>
+        var catalogSkus = {{ skus | tojson }};
+        var catalogDisplays = {{ displays | tojson }};
+        var currentCardCount = 0;
+
+        function showDisplayPicker() {
+            document.getElementById('view-picker').style.display = '';
+            document.getElementById('view-list').style.display = 'none';
+            document.getElementById('catalog-search').value = '';
+        }
+
+        function showDisplay(displayId) {
+            document.getElementById('view-picker').style.display = 'none';
+            document.getElementById('view-list').style.display = '';
+            document.getElementById('catalog-search').value = '';
+
+            var cards = [];
+            var title = '';
+            var showBadges = (displayId !== 'all');
+
+            if (displayId === 'all') {
+                title = 'All SKUs';
+                var allSkus = Object.values(catalogSkus);
+                allSkus.sort(function(a, b) { return a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0; });
+                allSkus.forEach(function(skuData) {
+                    cards.push({ position: null, skuData: skuData, isInMaster: true });
+                });
+            } else {
+                var display = null;
+                for (var i = 0; i < catalogDisplays.length; i++) {
+                    if (catalogDisplays[i].id === displayId) { display = catalogDisplays[i]; break; }
+                }
+                if (!display) return;
+                title = display.name;
+                display.slots.forEach(function(slot) {
+                    slot.skus.forEach(function(skuCode) {
+                        var upper = skuCode.toUpperCase();
+                        var skuData = catalogSkus[upper] || null;
+                        cards.push({
+                            position: slot.position,
+                            skuData: skuData ? skuData : { sku: skuCode, description: null, image_filename: null },
+                            isInMaster: !!skuData
+                        });
+                    });
+                });
+            }
+
+            document.getElementById('view-list-title').textContent = title;
+            currentCardCount = cards.length;
+
+            var grid = document.getElementById('catalog-grid');
+            grid.innerHTML = '';
+
+            cards.forEach(function(card, idx) {
+                var el = document.createElement('div');
+                el.className = 'studio-card';
+                el.setAttribute('data-sku', card.skuData.sku.toLowerCase());
+                el.setAttribute('data-desc', (card.skuData.description || '').toLowerCase());
+
+                var html = '';
+
+                // Image area — wrap in relative div to allow position badge overlay
+                html += '<div style="position:relative;">';
+                if (showBadges && card.position !== null) {
+                    html += '<span style="position:absolute;top:4px;left:4px;z-index:1;background:#1a1a1a;color:#ffffff;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;font-size:9px;font-weight:400;letter-spacing:0.08em;padding:2px 6px;">' + card.position + '</span>';
+                }
+                if (card.isInMaster && card.skuData.image_filename) {
+                    html += '<div class="studio-card-img"><img src="/database/images/' + escHtml(card.skuData.image_filename) + '" alt="' + escHtml(card.skuData.sku) + '"></div>';
+                } else {
+                    html += '<div class="studio-card-img studio-card-noimg"><span>No image</span></div>';
+                }
+                html += '</div>';
+
+                // SKU code
+                html += '<div class="studio-card-sku">' + escHtml(card.skuData.sku) + '</div>';
+
+                if (!card.isInMaster) {
+                    // Minimal placeholder — no barcode
+                    html += '<div class="studio-sku-count">Not in master file</div>';
+                    el.innerHTML = html;
+                    grid.appendChild(el);
+                } else {
+                    html += '<div class="studio-card-desc">' + escHtml(card.skuData.description || '') + '</div>';
+                    var bcId = 'bc_' + card.skuData.sku.replace(/[^a-zA-Z0-9]/g, '_') + '_' + idx;
+                    html += '<svg id="' + bcId + '"></svg>';
+                    el.innerHTML = html;
+                    grid.appendChild(el);
+                    try {
+                        JsBarcode('#' + bcId, card.skuData.sku, {
+                            format: 'CODE128', width: 1, height: 28, displayValue: false, margin: 0
+                        });
+                    } catch(e) {}
+                }
+            });
+
+            updateCatalogCount();
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function filterCatalogCards() {
+            var query = document.getElementById('catalog-search').value.toLowerCase();
+            var cards = document.querySelectorAll('#catalog-grid .studio-card');
+            var visible = 0;
+            cards.forEach(function(card) {
+                var sku = card.getAttribute('data-sku') || '';
+                var desc = card.getAttribute('data-desc') || '';
+                if (sku.indexOf(query) !== -1 || desc.indexOf(query) !== -1) {
+                    card.style.display = '';
+                    visible++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            var countEl = document.getElementById('catalog-sku-count');
+            if (query) {
+                countEl.textContent = 'Showing ' + visible + ' of ' + currentCardCount + ' SKUs';
+            } else {
+                countEl.textContent = currentCardCount + ' SKUs';
+            }
+        }
+
+        function updateCatalogCount() {
+            document.getElementById('catalog-sku-count').textContent = currentCardCount + ' SKUs';
+        }
+    </script>
+</body>
+</html>

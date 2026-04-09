@@ -563,6 +563,55 @@ def studio_omnicounts():
     return send_file(result_bytes, mimetype='text/csv', as_attachment=True, download_name=download_name)
 
 
+@app.route('/studio/catalog')
+def studio_catalog():
+    if not session.get('studio_logged_in') and not session.get('hq_logged_in'):
+        return redirect(url_for('studio_login'))
+
+    skus = {}
+    master_filename = None
+    sku_count = 0
+    msf_path = os.path.join(MASTER_DIR, 'SKU_Master.csv')
+    if os.path.isfile(msf_path):
+        master_filename = 'SKU_Master.csv'
+        try:
+            rows = parse_csv(msf_path)
+            image_map = {}
+            if os.path.isdir(IMAGES_DIR):
+                for fname in os.listdir(IMAGES_DIR):
+                    image_map[fname.lower()] = fname
+            for row in rows:
+                sku_code = row.get('sku', '').strip().upper()
+                desc = row.get('description', '').strip()
+                if sku_code and not is_excluded_sku(sku_code):
+                    img = None
+                    sku_lower = sku_code.lower()
+                    for fname_lower, fname in image_map.items():
+                        if fname_lower.startswith(sku_lower):
+                            img = fname
+                            break
+                    skus[sku_code] = {'sku': sku_code, 'description': desc, 'image_filename': img}
+            sku_count = len(skus)
+        except Exception:
+            pass
+
+    displays = []
+    planogram_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'planogram_order.json')
+    if os.path.isfile(planogram_path):
+        try:
+            with open(planogram_path, 'r') as f:
+                planogram_data = json.load(f)
+            displays = planogram_data.get('displays', [])
+        except Exception:
+            pass
+
+    return render_template('catalog.html',
+                           skus=skus,
+                           displays=displays,
+                           sku_count=sku_count,
+                           master_filename=master_filename)
+
+
 # --- HQ portal ---
 
 @app.route('/hq/login', methods=['GET', 'POST'])
