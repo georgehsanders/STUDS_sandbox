@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STUDS — Stock Check Count</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        .sc-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 32px;
+            align-items: start;
+            margin-bottom: 28px;
+        }
+        @media (max-width: 800px) {
+            .sc-layout { grid-template-columns: 1fr; }
+        }
+        .sc-onhand-panel {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            padding: 24px;
+        }
+        .sc-stat-label {
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #999;
+            margin-bottom: 4px;
+        }
+        .sc-stat-value {
+            font-size: 28px;
+            font-weight: 500;
+            color: #1a1a1a;
+            margin-bottom: 20px;
+        }
+        .sc-stat-value-sm {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+        .sc-location-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .sc-location-label {
+            min-width: 160px;
+            font-size: 13px;
+            color: #1a1a1a;
+        }
+        .sc-qty-input {
+            width: 80px;
+            padding: 6px 10px;
+            border: 1.5px solid #000;
+            border-radius: 0;
+            font-size: 13px;
+            color: #1a1a1a;
+            background: #fff;
+        }
+        .sc-nav-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding-top: 24px;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 8px;
+        }
+        .sc-progress {
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #999;
+            margin-bottom: 20px;
+        }
+        .sc-progress-bar-wrap {
+            height: 3px;
+            background: #e0e0e0;
+            margin-bottom: 28px;
+        }
+        .sc-progress-bar {
+            height: 3px;
+            background: #c8f135;
+            transition: width 0.2s;
+        }
+        .sc-missing-warning {
+            background: #fef9c3;
+            border: 1px solid #000;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+        }
+        /* Summary table */
+        .sc-summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .sc-summary-table thead th {
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #999;
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1.5px solid #000;
+        }
+        .sc-summary-table tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            color: #1a1a1a;
+            vertical-align: middle;
+        }
+        .sc-summary-table tbody tr:hover {
+            background: #f7f7f7;
+        }
+        .sc-stats-bar {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 24px;
+            padding: 16px 20px;
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+        }
+        .sc-card-wrap {
+            /* constrains card to a single fixed-width column */
+        }
+    </style>
+</head>
+<body class="studio-body">
+
+    <header class="studio-spa-header">
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:20px 32px 10px 32px;width:100%;">
+            <div style="display:flex;justify-content:flex-start;align-items:center;">
+                {% if session.get('is_admin') %}
+                <div style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;border:1.5px solid #000;background:#c8f135;flex-shrink:0;">
+                    <a href="/studio/goto-hq" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">HQ</a>
+                    <span style="color:#666;font-size:11px;">|</span>
+                    <a href="/studio/logout" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">LOGOUT</a>
+                </div>
+                {% else %}
+                <div style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;border:1.5px solid #000;background:#c8f135;flex-shrink:0;">
+                    <a href="/studio/logout" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">LOGOUT</a>
+                </div>
+                {% endif %}
+            </div>
+            <div style="text-align:center;white-space:nowrap;">
+                <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:62px;font-weight:500;letter-spacing:0.01em;color:#1a1a1a;line-height:1;">STUDS</div>
+                <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;letter-spacing:0.14em;text-transform:uppercase;color:#1a1a1a;margin-top:4px;">(CONFIDENTIAL)</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;">
+                <div style="display:inline-flex;align-items:center;gap:10px;padding:0 16px;height:34px;width:auto;white-space:nowrap;border:1.5px solid #000;background:#e8b4f8;flex-shrink:0;">
+                    <a href="/studio/stock-check" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#000;text-decoration:none;">STOCK CHECK</a>
+                </div>
+            </div>
+        </div>
+        <hr style="border:none;border-top:1.5px solid #000;margin:0;padding:0;width:100%;">
+        <div style="display:flex;justify-content:center;padding:10px 32px;">
+            <span style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#999;">STOCK CHECK</span>
+        </div>
+        <hr style="border:none;border-top:1px solid #e0e0e0;margin:0;padding:0;width:100%;">
+    </header>
+
+    {% if sku_items %}
+
+    <!-- Pre-rendered SKU cards (one per item, shown one at a time) -->
+    <div style="display:none;" aria-hidden="true">
+        {% for item in sku_items %}
+        <div id="sku-card-{{ loop.index0 }}" class="studio-card sc-card-wrap">
+            {% if item.image_filename %}
+            <div class="studio-card-img">
+                <img src="/database/images/{{ item.image_filename }}" alt="{{ item.sku }}">
+                {% if item.status %}
+                <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="studio-card-img studio-card-noimg">
+                <span>No image</span>
+                {% if item.status %}
+                <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+            <div class="studio-card-info">
+                <div>
+                    <div class="studio-card-sku">{{ item.sku }}</div>
+                    <div class="studio-card-desc">{{ item.description }}</div>
+                </div>
+                {% if item.retail_price is not none %}
+                <div class="studio-sku-price">${{ '%.2f'|format(item.retail_price) }}</div>
+                {% endif %}
+            </div>
+            <svg id="barcode-sc-{{ loop.index0 }}"></svg>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ===== COUNTING VIEW ===== -->
+    <div id="counting-view" class="studio-main">
+
+        <div class="sc-progress" id="progress-text">SKU 1 of {{ sku_items|length }}</div>
+        <div class="sc-progress-bar-wrap">
+            <div class="sc-progress-bar" id="progress-bar" style="width:0%;"></div>
+        </div>
+
+        <div class="sc-layout">
+
+            <!-- LEFT: SKU card display -->
+            <div id="card-display-slot"></div>
+
+            <!-- RIGHT: On-hand panel -->
+            <div class="sc-onhand-panel">
+                <div id="bp-missing-warning" class="sc-missing-warning" style="display:none;">
+                    ⚠ This SKU was not found in your uploaded BP file.
+                </div>
+                <div class="sc-stat-label">Brightpearl On Hand</div>
+                <div class="sc-stat-value" id="bp-onhand-display">—</div>
+
+                <div class="sc-stat-label">Your Count</div>
+                <div class="sc-stat-value" id="your-count-display" style="color:#1a1a1a;">0</div>
+
+                <div class="sc-stat-label">Variance</div>
+                <div class="sc-stat-value-sm" id="variance-display" style="color:#999;">—</div>
+            </div>
+        </div>
+
+        <!-- Location count inputs -->
+        <div class="hq-section">
+            <div class="hq-section-heading" style="margin-bottom:16px;">Enter Your Counts by Location</div>
+
+            <div id="location-rows"></div>
+
+            <div style="margin-top:12px;">
+                <select id="location-select" class="hq-select" onchange="handleLocationSelect(this)" style="margin-left:0;height:36px;font-size:13px;">
+                    <option value="">+ Add Location...</option>
+                    <option value="Bin/Drawer">Bin/Drawer</option>
+                    <option value="Backstock">Backstock</option>
+                    <option value="Accessory Wall">Accessory Wall</option>
+                    <option value="Visual Display">Visual Display</option>
+                    <option value="DCR">DCR</option>
+                    <option value="__custom__">Custom Location</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="sc-nav-bar">
+            <button class="hq-btn" id="btn-prev" onclick="prevSku()">← Previous</button>
+            <button class="hq-btn hq-btn-lime" id="btn-next" onclick="nextSku()" style="font-weight:600;">Next SKU →</button>
+            <button class="hq-btn hq-btn-lime" id="btn-submit" onclick="showSummary()" style="display:none;font-weight:600;">Review &amp; Submit →</button>
+        </div>
+    </div>
+
+    <!-- ===== SUMMARY VIEW ===== -->
+    <div id="summary-view" class="studio-main" style="display:none;">
+
+        <div class="hq-section-heading" style="font-size:16px;margin-bottom:20px;">Stock Check Summary</div>
+
+        <div class="sc-stats-bar">
+            <div>
+                <div class="sc-stat-label">SKUs Matched</div>
+                <div style="font-size:22px;font-weight:500;color:#2d6930;" id="summary-matched">0</div>
+            </div>
+            <div>
+                <div class="sc-stat-label">SKUs with Variance</div>
+                <div style="font-size:22px;font-weight:500;color:#c23030;" id="summary-variances">0</div>
+            </div>
+            <div>
+                <div class="sc-stat-label">Total SKUs</div>
+                <div style="font-size:22px;font-weight:500;color:#1a1a1a;" id="summary-total">0</div>
+            </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table class="sc-summary-table">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Description</th>
+                        <th>BP On Hand</th>
+                        <th>Your Count</th>
+                        <th>Variance</th>
+                        <th>Flag</th>
+                    </tr>
+                </thead>
+                <tbody id="summary-table-body"></tbody>
+            </table>
+        </div>
+
+        <div class="sc-nav-bar" style="margin-top:24px;">
+            <button class="hq-btn" onclick="goBack()">← Go Back</button>
+            <button class="hq-btn hq-btn-lime" onclick="downloadReport()" style="font-weight:600;">Download Report</button>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="studio-empty">
+        <p class="studio-empty-message">No assigned SKUs found. Please ensure a weekly SKU list has been uploaded.</p>
+    </div>
+    {% endif %}
+
+    <script>
+        var skuItems = {{ sku_items | tojson }};
+        var currentIndex = 0;
+        var countData = {};
+
+        // Initialize countData for all SKUs
+        skuItems.forEach(function(item) {
+            countData[item.sku] = [];
+        });
+
+        var PRESET_LOCATIONS = ['Bin/Drawer', 'Backstock', 'Accessory Wall', 'Visual Display', 'DCR'];
+
+        // ---- Render a SKU by index ----
+        function renderSku(index) {
+            currentIndex = index;
+            var item = skuItems[index];
+            var total = skuItems.length;
+
+            // Move the pre-rendered card into the display slot
+            var slot = document.getElementById('card-display-slot');
+            slot.innerHTML = '';
+            var cardEl = document.getElementById('sku-card-' + index).cloneNode(true);
+            cardEl.style.display = '';
+            cardEl.id = 'active-card';
+            slot.appendChild(cardEl);
+
+            // Progress
+            document.getElementById('progress-text').textContent = 'SKU ' + (index + 1) + ' of ' + total;
+            var pct = total > 1 ? (index / (total - 1)) * 100 : 100;
+            document.getElementById('progress-bar').style.width = pct + '%';
+
+            // On-hand panel
+            if (item.missing_in_bp) {
+                document.getElementById('bp-missing-warning').style.display = '';
+                document.getElementById('bp-onhand-display').textContent = '—';
+            } else {
+                document.getElementById('bp-missing-warning').style.display = 'none';
+                document.getElementById('bp-onhand-display').textContent = item.bp_onhand;
+            }
+
+            // Restore saved location rows
+            renderLocationRows(countData[item.sku] || []);
+            updateTotals();
+
+            // Nav buttons
+            document.getElementById('btn-prev').style.display = index === 0 ? 'none' : '';
+            if (index === total - 1) {
+                document.getElementById('btn-next').style.display = 'none';
+                document.getElementById('btn-submit').style.display = '';
+            } else {
+                document.getElementById('btn-next').style.display = '';
+                document.getElementById('btn-submit').style.display = 'none';
+            }
+        }
+
+        // ---- Save current location rows into countData ----
+        function saveCurrentCounts() {
+            var sku = skuItems[currentIndex].sku;
+            var rows = document.querySelectorAll('#location-rows .sc-location-row');
+            var locations = [];
+            rows.forEach(function(row) {
+                var nameEl = row.querySelector('.loc-name-field');
+                var qtyEl = row.querySelector('.sc-qty-input');
+                var loc = nameEl ? (nameEl.tagName === 'INPUT' ? nameEl.value.trim() : nameEl.textContent.trim()) : '';
+                var qty = parseInt(qtyEl ? qtyEl.value : 0) || 0;
+                var isCustom = nameEl && nameEl.tagName === 'INPUT';
+                if (loc) {
+                    locations.push({ location: loc, qty: qty, isCustom: isCustom });
+                }
+            });
+            countData[sku] = locations;
+        }
+
+        // ---- Restore location rows from saved data ----
+        function renderLocationRows(locations) {
+            document.getElementById('location-rows').innerHTML = '';
+            (locations || []).forEach(function(row) {
+                addLocationRow(row.location, row.qty, row.isCustom || false);
+            });
+        }
+
+        // ---- Add a location row ----
+        function addLocationRow(locationName, qty, isCustom) {
+            var container = document.getElementById('location-rows');
+            var rowDiv = document.createElement('div');
+            rowDiv.className = 'sc-location-row';
+
+            var nameEl;
+            if (isCustom) {
+                nameEl = document.createElement('input');
+                nameEl.type = 'text';
+                nameEl.className = 'loc-name-field studio-search-input';
+                nameEl.placeholder = 'Location name';
+                nameEl.value = locationName || '';
+                nameEl.style.cssText = 'width:180px;padding:6px 10px;font-size:13px;';
+                nameEl.addEventListener('input', updateTotals);
+            } else {
+                nameEl = document.createElement('span');
+                nameEl.className = 'loc-name-field sc-location-label';
+                nameEl.textContent = locationName || '';
+            }
+
+            var qtyInput = document.createElement('input');
+            qtyInput.type = 'number';
+            qtyInput.className = 'sc-qty-input';
+            qtyInput.value = qty !== undefined ? qty : 0;
+            qtyInput.min = 0;
+            qtyInput.addEventListener('input', updateTotals);
+
+            var removeBtn = document.createElement('button');
+            removeBtn.className = 'hq-btn';
+            removeBtn.textContent = '×';
+            removeBtn.style.cssText = 'padding:0 12px;height:32px;font-size:16px;line-height:1;flex-shrink:0;';
+            removeBtn.addEventListener('click', function() {
+                rowDiv.remove();
+                updateTotals();
+            });
+
+            rowDiv.appendChild(nameEl);
+            rowDiv.appendChild(qtyInput);
+            rowDiv.appendChild(removeBtn);
+            container.appendChild(rowDiv);
+            updateTotals();
+        }
+
+        // ---- Handle location dropdown selection ----
+        function handleLocationSelect(select) {
+            var val = select.value;
+            if (!val) return;
+            select.value = '';
+            if (val === '__custom__') {
+                addLocationRow('', 0, true);
+            } else {
+                addLocationRow(val, 0, false);
+            }
+        }
+
+        // ---- Compute totals and update panel ----
+        function updateTotals() {
+            var qtyInputs = document.querySelectorAll('#location-rows .sc-qty-input');
+            var total = 0;
+            qtyInputs.forEach(function(input) {
+                total += parseInt(input.value) || 0;
+            });
+            document.getElementById('your-count-display').textContent = total;
+
+            var item = skuItems[currentIndex];
+            var bpOnhand = item.missing_in_bp ? 0 : item.bp_onhand;
+            var variance = total - bpOnhand;
+            var varEl = document.getElementById('variance-display');
+
+            if (item.missing_in_bp) {
+                varEl.textContent = '—';
+                varEl.style.color = '#999';
+            } else {
+                varEl.textContent = (variance >= 0 ? '+' : '') + variance;
+                varEl.style.color = variance === 0 ? '#2d6930' : '#c23030';
+            }
+        }
+
+        // ---- Navigation ----
+        function prevSku() {
+            if (currentIndex > 0) {
+                saveCurrentCounts();
+                renderSku(currentIndex - 1);
+            }
+        }
+
+        function nextSku() {
+            if (currentIndex < skuItems.length - 1) {
+                saveCurrentCounts();
+                renderSku(currentIndex + 1);
+            }
+        }
+
+        function getTotalCount(sku) {
+            return (countData[sku] || []).reduce(function(sum, row) {
+                return sum + (parseInt(row.qty) || 0);
+            }, 0);
+        }
+
+        // ---- Show summary view ----
+        function showSummary() {
+            saveCurrentCounts();
+
+            var matched = 0, variances = 0;
+            var rows = '';
+
+            skuItems.forEach(function(item) {
+                var counted = getTotalCount(item.sku);
+                var bpOnhand = item.missing_in_bp ? 0 : item.bp_onhand;
+                var variance = counted - bpOnhand;
+
+                if (!item.missing_in_bp && variance === 0) {
+                    matched++;
+                } else {
+                    variances++;
+                }
+
+                var varStyle = variance === 0 && !item.missing_in_bp ? 'color:#2d6930;' : 'color:#c23030;';
+                var varText = item.missing_in_bp ? '—' : (variance >= 0 ? '+' : '') + variance;
+
+                var flag = '';
+                if (item.missing_in_bp) {
+                    flag = '<span style="color:#c23030;font-size:11px;">Not found in BP file</span>';
+                } else if (Math.abs(variance) > 5) {
+                    flag = '<span style="color:#c23030;font-size:11px;">⚠ This seems off, please recount!</span>';
+                }
+
+                rows += '<tr>'
+                    + '<td><strong>' + escHtml(item.sku) + '</strong></td>'
+                    + '<td>' + escHtml(item.description) + '</td>'
+                    + '<td>' + (item.missing_in_bp ? '—' : item.bp_onhand) + '</td>'
+                    + '<td>' + counted + '</td>'
+                    + '<td style="' + varStyle + 'font-weight:600;">' + varText + '</td>'
+                    + '<td>' + flag + '</td>'
+                    + '</tr>';
+            });
+
+            document.getElementById('summary-table-body').innerHTML = rows;
+            document.getElementById('summary-matched').textContent = matched;
+            document.getElementById('summary-variances').textContent = variances;
+            document.getElementById('summary-total').textContent = skuItems.length;
+
+            document.getElementById('counting-view').style.display = 'none';
+            document.getElementById('summary-view').style.display = '';
+            window.scrollTo(0, 0);
+        }
+
+        // ---- Go back from summary ----
+        function goBack() {
+            document.getElementById('summary-view').style.display = 'none';
+            document.getElementById('counting-view').style.display = '';
+            renderSku(skuItems.length - 1);
+        }
+
+        // ---- Download report ----
+        function downloadReport() {
+            var payload = skuItems.map(function(item) {
+                return {
+                    sku: item.sku,
+                    description: item.description,
+                    bp_onhand: item.missing_in_bp ? 0 : item.bp_onhand,
+                    counted_total: getTotalCount(item.sku),
+                };
+            });
+
+            fetch('/studio/stock-check/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+            .then(function(res) {
+                var disposition = res.headers.get('Content-Disposition') || '';
+                var match = disposition.match(/filename="?([^"]+)"?/);
+                var filename = match ? match[1] : 'Stock_Check.csv';
+                return res.blob().then(function(blob) {
+                    return { blob: blob, filename: filename };
+                });
+            })
+            .then(function(result) {
+                var url = URL.createObjectURL(result.blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = result.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            })
+            .catch(function(err) {
+                alert('Error generating report: ' + err.message);
+            });
+        }
+
+        function escHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // ---- Init ----
+        document.addEventListener('DOMContentLoaded', function() {
+            // Render barcodes for all pre-rendered cards
+            skuItems.forEach(function(item, idx) {
+                try {
+                    JsBarcode('#barcode-sc-' + idx, item.sku, {
+                        format: 'CODE128', width: 1, height: 28, displayValue: false, margin: 0
+                    });
+                } catch(e) {}
+            });
+
+            if (skuItems.length > 0) {
+                renderSku(0);
+            }
+        });
+    </script>
+</body>
+</html>

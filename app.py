@@ -620,6 +620,166 @@ def studio_catalog():
                            master_filename=master_filename)
 
 
+@app.route('/studio/stock-check')
+@studio_login_required
+def studio_stock_check():
+    scan = scan_input_files()
+    sku_items = []
+    sku_list_filename = None
+    if scan['sku_lists']:
+        sku_list_filename = scan['sku_lists'][0][0]
+        filepath = os.path.join(INPUT_DIR, sku_list_filename)
+        sku_rows = parse_csv(filepath)
+        sku_names = {}
+        sku_set = set()
+        for row in sku_rows:
+            sku = row.get('sku', '').strip()
+            name = row.get('product name', '').strip()
+            if sku and not is_excluded_sku(sku):
+                sku_set.add(sku)
+                sku_names[sku] = name
+        master = load_master_skus()
+        sku_status = load_sku_status()
+        sku_prices = load_sku_prices()
+        for sku in sorted(sku_set):
+            desc = master.get(sku.upper(), '') or sku_names.get(sku, '') or sku
+            image_filename = find_image_for_sku(sku)
+            status = sku_status.get(sku.upper())
+            price = sku_prices.get(sku.upper())
+            sku_items.append({
+                'sku': sku,
+                'description': desc,
+                'image_filename': image_filename,
+                'status': status,
+                'retail_price': price,
+            })
+    return render_template('stock_check.html',
+                           sku_items=sku_items,
+                           sku_list_filename=sku_list_filename)
+
+
+@app.route('/studio/stock-check/upload', methods=['POST'])
+@studio_login_required
+def studio_stock_check_upload():
+    f = request.files.get('bp_file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+    try:
+        raw_bytes = f.read()
+        text = clean_csv_content(raw_bytes)
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            return jsonify({'ok': False, 'error': 'Could not read file headers'}), 400
+        headers = [h.strip().lower() for h in reader.fieldnames]
+        reader.fieldnames = headers
+        sku_col = None
+        qty_col = None
+        for h in headers:
+            if h == 'sku' and sku_col is None:
+                sku_col = h
+        for h in headers:
+            if ('on hand' in h or 'onhand' in h or 'on-hand' in h) and qty_col is None:
+                qty_col = h
+        if qty_col is None:
+            for h in headers:
+                if 'quantity' in h and qty_col is None:
+                    qty_col = h
+        if sku_col is None:
+            return jsonify({'ok': False, 'error': 'No SKU column found in uploaded file'}), 400
+        if qty_col is None:
+            return jsonify({'ok': False, 'error': 'No on-hand quantity column found. Expected a column containing "on hand" or "quantity".'}), 400
+        bp_data = {}
+        for row in reader:
+            sku = (row.get(sku_col) or '').strip().upper()
+            qty_str = (row.get(qty_col) or '').strip()
+            if not sku or is_excluded_sku(sku):
+                continue
+            try:
+                qty = int(float(qty_str))
+            except (ValueError, TypeError):
+                qty = 0
+            bp_data[sku] = qty
+        session['bp_onhand'] = bp_data
+        return jsonify({'ok': True, 'sku_count': len(bp_data)})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/studio/stock-check/count')
+@studio_login_required
+def studio_stock_check_count():
+    scan = scan_input_files()
+    sku_items = []
+    if scan['sku_lists']:
+        sku_list_filename = scan['sku_lists'][0][0]
+        filepath = os.path.join(INPUT_DIR, sku_list_filename)
+        sku_rows = parse_csv(filepath)
+        sku_names = {}
+        sku_set = set()
+        for row in sku_rows:
+            sku = row.get('sku', '').strip()
+            name = row.get('product name', '').strip()
+            if sku and not is_excluded_sku(sku):
+                sku_set.add(sku)
+                sku_names[sku] = name
+        master = load_master_skus()
+        sku_status = load_sku_status()
+        sku_prices = load_sku_prices()
+        bp_onhand = session.get('bp_onhand', {})
+        for sku in sorted(sku_set):
+            desc = master.get(sku.upper(), '') or sku_names.get(sku, '') or sku
+            image_filename = find_image_for_sku(sku)
+            status = sku_status.get(sku.upper())
+            price = sku_prices.get(sku.upper())
+            bp_qty = bp_onhand.get(sku.upper())
+            sku_items.append({
+                'sku': sku,
+                'description': desc,
+                'image_filename': image_filename,
+                'status': status,
+                'retail_price': price,
+                'bp_onhand': bp_qty if bp_qty is not None else 0,
+                'missing_in_bp': bp_qty is None,
+            })
+    return render_template('stock_check_count.html', sku_items=sku_items)
+
+
+@app.route('/studio/stock-check/submit', methods=['POST'])
+@studio_login_required
+def studio_stock_check_submit():
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data'}), 400
+    store_id = session.get('store_id', '')
+    store_name = store_id or 'Studio'
+    if store_id:
+        conn = get_db()
+        row = conn.execute('SELECT name FROM stores WHERE store_id = ?', (store_id,)).fetchone()
+        conn.close()
+        if row:
+            store_name = row['name']
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['SKU', 'Description', 'BP On Hand', 'Counted Total', 'Variance'])
+    for item in data:
+        sku = item.get('sku', '')
+        desc = item.get('description', '')
+        bp_on = item.get('bp_onhand', 0)
+        counted = item.get('counted_total', 0)
+        variance = counted - bp_on
+        writer.writerow([sku, desc, bp_on, counted, variance])
+    output.seek(0)
+    date_str = datetime.now().strftime('%Y%m%d')
+    store_name_safe = re.sub(r'[^\w\s-]', '', store_name).strip().replace(' ', '_')
+    filename = f'Stock_Check_{store_name_safe}_{date_str}.csv'
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
 # --- HQ portal ---
 
 @app.route('/hq/login', methods=['GET', 'POST'])
