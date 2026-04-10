@@ -140,7 +140,7 @@
                 title = display.name;
                 display.slots.forEach(function(slot) {
                     slot.skus.forEach(function(skuCode) {
-                        var upper = skuCode.toUpperCase();
+                        var upper = skuCode.trim().toUpperCase();
                         var skuData = catalogSkus[upper] || null;
                         cards.push({
                             position: slot.position,
