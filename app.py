@@ -758,6 +758,18 @@ def studio_stock_check_submit():
         conn.close()
         if row:
             store_name = row['name']
+    # Save counts to session so the verify flow can access them
+    sc_counts = {}
+    for item in data:
+        sku = (item.get('sku', '') or '').strip().upper()
+        if sku:
+            sc_counts[sku] = {
+                'description': item.get('description', ''),
+                'counted_total': item.get('counted_total', 0),
+                'bp_onhand': item.get('bp_onhand', 0),
+                'missing_in_bp': bool(item.get('missing_in_bp', False)),
+            }
+    session['sc_counts'] = sc_counts
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['SKU', 'Description', 'BP On Hand', 'Counted Total', 'Variance'])
@@ -772,6 +784,153 @@ def studio_stock_check_submit():
     date_str = datetime.now().strftime('%Y%m%d')
     store_name_safe = re.sub(r'[^\w\s-]', '', store_name).strip().replace(' ', '_')
     filename = f'Stock_Check_{store_name_safe}_{date_str}.csv'
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@app.route('/studio/stock-check/save-counts', methods=['POST'])
+@studio_login_required
+def studio_stock_check_save_counts():
+    """Save current count totals to session so the verify flow can access them."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data'}), 400
+    sc_counts = {}
+    for item in data:
+        sku = (item.get('sku', '') or '').strip().upper()
+        if sku:
+            sc_counts[sku] = {
+                'description': item.get('description', ''),
+                'counted_total': item.get('counted_total', 0),
+                'bp_onhand': item.get('bp_onhand', 0),
+                'missing_in_bp': bool(item.get('missing_in_bp', False)),
+            }
+    session['sc_counts'] = sc_counts
+    return jsonify({'ok': True})
+
+
+@app.route('/studio/stock-check/verify')
+@studio_login_required
+def studio_stock_check_verify():
+    sc_counts = session.get('sc_counts')
+    if not sc_counts:
+        flash('Please complete a stock check before verifying.', 'error')
+        return redirect(url_for('studio_stock_check'))
+    sku_items = []
+    for sku_upper, count_data in sc_counts.items():
+        sku_items.append({
+            'sku': sku_upper,
+            'description': count_data.get('description', ''),
+            'counted_total': count_data.get('counted_total', 0),
+            'bp_onhand': count_data.get('bp_onhand', 0),
+            'missing_in_bp': count_data.get('missing_in_bp', False),
+        })
+    sku_items.sort(key=lambda x: x['sku'])
+    return render_template('stock_check_verify.html', sku_items=sku_items)
+
+
+@app.route('/studio/stock-check/verify/upload', methods=['POST'])
+@studio_login_required
+def studio_stock_check_verify_upload():
+    f = request.files.get('bp_file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+    try:
+        raw_bytes = f.read()
+        text = clean_csv_content(raw_bytes)
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            return jsonify({'ok': False, 'error': 'Could not read file headers'}), 400
+        headers = [h.strip().lower() for h in reader.fieldnames]
+        reader.fieldnames = headers
+        sku_col = None
+        qty_col = None
+        for h in headers:
+            if h == 'sku' and sku_col is None:
+                sku_col = h
+        for h in headers:
+            if ('on hand' in h or 'onhand' in h or 'on-hand' in h) and qty_col is None:
+                qty_col = h
+        if qty_col is None:
+            for h in headers:
+                if 'quantity' in h and qty_col is None:
+                    qty_col = h
+        if sku_col is None:
+            return jsonify({'ok': False, 'error': 'No SKU column found in uploaded file'}), 400
+        if qty_col is None:
+            return jsonify({'ok': False, 'error': 'No on-hand quantity column found. Expected a column containing "on hand" or "quantity".'}), 400
+        post_bp = {}
+        for row in reader:
+            sku = (row.get(sku_col) or '').strip().upper()
+            qty_str = (row.get(qty_col) or '').strip()
+            if not sku or is_excluded_sku(sku):
+                continue
+            try:
+                qty = int(float(qty_str))
+            except (ValueError, TypeError):
+                qty = 0
+            post_bp[sku] = qty
+        session['post_bp_onhand'] = post_bp
+        # Build comparison data for JS
+        sc_counts = session.get('sc_counts', {})
+        comparisons = []
+        for sku_upper, count_data in sc_counts.items():
+            counted_total = count_data.get('counted_total', 0)
+            bp_qty = count_data.get('bp_onhand', 0)
+            missing_in_bp = count_data.get('missing_in_bp', False)
+            post_qty = post_bp.get(sku_upper)
+            missing_in_post = post_qty is None
+            comparisons.append({
+                'sku': sku_upper,
+                'description': count_data.get('description', ''),
+                'counted_total': counted_total,
+                'bp_onhand': bp_qty,
+                'missing_in_bp': missing_in_bp,
+                'post_bp_onhand': post_qty if post_qty is not None else 0,
+                'missing_in_post': missing_in_post,
+            })
+        comparisons.sort(key=lambda x: x['sku'])
+        return jsonify({'ok': True, 'sku_count': len(post_bp), 'comparisons': comparisons})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/studio/stock-check/verify/submit', methods=['POST'])
+@studio_login_required
+def studio_stock_check_verify_submit():
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data'}), 400
+    store_id = session.get('store_id', '')
+    store_name = store_id or 'Studio'
+    if store_id:
+        conn = get_db()
+        row = conn.execute('SELECT name FROM stores WHERE store_id = ?', (store_id,)).fetchone()
+        conn.close()
+        if row:
+            store_name = row['name']
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['SKU', 'Description', 'Original Count', 'Original Variance',
+                     'Post-Adjustment BP On Hand', 'Verified', 'Reason', 'Notes'])
+    for item in data:
+        sku = item.get('sku', '')
+        desc = item.get('description', '')
+        original_count = item.get('counted_total', 0)
+        original_variance = item.get('original_variance', '')
+        post_bp = item.get('post_bp_onhand', '')
+        verified = 'Yes' if item.get('verified') else 'No'
+        reason = item.get('reason', '')
+        notes = item.get('notes', '')
+        writer.writerow([sku, desc, original_count, original_variance, post_bp, verified, reason, notes])
+    output.seek(0)
+    date_str = datetime.now().strftime('%Y%m%d')
+    store_name_safe = re.sub(r'[^\w\s-]', '', store_name).strip().replace(' ', '_')
+    filename = f'Stock_Check_Verification_{store_name_safe}_{date_str}.csv'
     return send_file(
         io.BytesIO(output.getvalue().encode('utf-8')),
         mimetype='text/csv',

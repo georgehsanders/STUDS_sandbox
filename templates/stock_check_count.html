@@ -3,24 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>STUDS — Stock Check Count</title>
+    <title>STUDS — Stock Check</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
-        .sc-layout {
+        /* --- Location Picker --- */
+        .sc-loc-grid {
             display: grid;
-            grid-template-columns: 280px 1fr;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 600px) {
+            .sc-loc-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .sc-loc-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 12px;
+            border: 1.5px solid #000;
+            background: #fff;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            min-height: 72px;
+            transition: background 0.1s;
+        }
+        .sc-loc-btn:hover { background: #fafafa; }
+        .sc-loc-btn-done {
+            background: #f0fbd4 !important;
+            border-color: #2d6930 !important;
+        }
+        .sc-loc-done-label {
+            font-size: 10px;
+            color: #2d6930;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin-top: 5px;
+        }
+        /* --- SKU List (Counting View) --- */
+        .sc-sku-list { margin-bottom: 24px; }
+        .sc-sku-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .sc-compact-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 0;
+        }
+        .sc-compact-img {
+            width: 56px;
+            height: 56px;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .sc-compact-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .sc-compact-noimg {
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sc-compact-noimg span { font-size: 9px; color: #ccc; }
+        .sc-compact-info { flex: 1; min-width: 0; }
+        .sc-compact-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            padding: 2px 6px;
+            margin-bottom: 3px;
+        }
+        .sc-compact-badge-active { background: #e8b4f8; color: #000; }
+        .sc-compact-badge-sunset { background: #c8f135; color: #000; }
+        .sc-missing-dot {
+            font-size: 11px;
+            color: #c23030;
+            font-weight: 700;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .sc-qty-input {
+            width: 72px;
+            padding: 8px 10px;
+            border: 1.5px solid #000;
+            font-size: 14px;
+            text-align: center;
+            flex-shrink: 0;
+            border-radius: 0;
+            background: #fff;
+            color: #1a1a1a;
+        }
+        /* --- Navigation bar --- */
+        .sc-nav-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding-top: 24px;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 8px;
+        }
+        /* --- Summary table --- */
+        .sc-stats-bar {
+            display: flex;
             gap: 32px;
-            align-items: start;
-            margin-bottom: 28px;
-        }
-        @media (max-width: 800px) {
-            .sc-layout { grid-template-columns: 1fr; }
-        }
-        .sc-onhand-panel {
+            margin-bottom: 24px;
+            padding: 16px 20px;
             background: #fafafa;
             border: 1px solid #e0e0e0;
-            padding: 24px;
         }
         .sc-stat-label {
             font-size: 10px;
@@ -30,72 +135,6 @@
             color: #999;
             margin-bottom: 4px;
         }
-        .sc-stat-value {
-            font-size: 28px;
-            font-weight: 500;
-            color: #1a1a1a;
-            margin-bottom: 20px;
-        }
-        .sc-stat-value-sm {
-            font-size: 18px;
-            font-weight: 500;
-            margin-bottom: 20px;
-        }
-        .sc-location-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-        .sc-location-label {
-            min-width: 160px;
-            font-size: 13px;
-            color: #1a1a1a;
-        }
-        .sc-qty-input {
-            width: 80px;
-            padding: 6px 10px;
-            border: 1.5px solid #000;
-            border-radius: 0;
-            font-size: 13px;
-            color: #1a1a1a;
-            background: #fff;
-        }
-        .sc-nav-bar {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            padding-top: 24px;
-            border-top: 1px solid #e0e0e0;
-            margin-top: 8px;
-        }
-        .sc-progress {
-            font-size: 11px;
-            font-weight: 400;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #999;
-            margin-bottom: 20px;
-        }
-        .sc-progress-bar-wrap {
-            height: 3px;
-            background: #e0e0e0;
-            margin-bottom: 28px;
-        }
-        .sc-progress-bar {
-            height: 3px;
-            background: #c8f135;
-            transition: width 0.2s;
-        }
-        .sc-missing-warning {
-            background: #fef9c3;
-            border: 1px solid #000;
-            padding: 8px 12px;
-            font-size: 12px;
-            color: #1a1a1a;
-            margin-bottom: 12px;
-        }
-        /* Summary table */
         .sc-summary-table {
             width: 100%;
             border-collapse: collapse;
@@ -110,26 +149,42 @@
             text-align: left;
             padding: 8px 12px;
             border-bottom: 1.5px solid #000;
+            white-space: nowrap;
         }
         .sc-summary-table tbody td {
-            padding: 10px 12px;
+            padding: 8px 12px;
             border-bottom: 1px solid #e0e0e0;
             color: #1a1a1a;
             vertical-align: middle;
         }
-        .sc-summary-table tbody tr:hover {
-            background: #f7f7f7;
+        .sc-summary-table tbody tr:hover { background: #fafafa; }
+        .sc-cell-input {
+            width: 62px;
+            padding: 4px 6px;
+            border: 1px solid #e0e0e0;
+            font-size: 13px;
+            text-align: center;
+            background: #fff;
+            border-radius: 0;
         }
-        .sc-stats-bar {
-            display: flex;
-            gap: 32px;
-            margin-bottom: 24px;
-            padding: 16px 20px;
+        .sc-cell-input:focus { border-color: #000; outline: none; }
+        /* --- Add location panel --- */
+        .sc-add-loc-panel {
+            display: none;
             background: #fafafa;
             border: 1px solid #e0e0e0;
+            padding: 16px;
+            margin-bottom: 16px;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
-        .sc-card-wrap {
-            /* constrains card to a single fixed-width column */
+        /* --- Verify CTA box --- */
+        .sc-verify-box {
+            border: 1.5px solid #000;
+            padding: 28px 32px;
+            text-align: center;
+            margin-top: 16px;
         }
     </style>
 </head>
@@ -169,135 +224,142 @@
 
     {% if sku_items %}
 
-    <!-- Pre-rendered SKU cards (one per item, shown one at a time) -->
-    <div style="display:none;" aria-hidden="true">
-        {% for item in sku_items %}
-        <div id="sku-card-{{ loop.index0 }}" class="studio-card sc-card-wrap">
-            {% if item.image_filename %}
-            <div class="studio-card-img">
-                <img src="/database/images/{{ item.image_filename }}" alt="{{ item.sku }}">
-                {% if item.status %}
-                <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
-                {% endif %}
-            </div>
-            {% else %}
-            <div class="studio-card-img studio-card-noimg">
-                <span>No image</span>
-                {% if item.status %}
-                <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
-                {% endif %}
-            </div>
-            {% endif %}
-            <div class="studio-card-info">
-                <div>
-                    <div class="studio-card-sku">{{ item.sku }}</div>
-                    <div class="studio-card-desc">{{ item.description }}</div>
-                </div>
-                {% if item.retail_price is not none %}
-                <div class="studio-sku-price">${{ '%.2f'|format(item.retail_price) }}</div>
-                {% endif %}
-            </div>
-            <svg id="barcode-sc-{{ loop.index0 }}"></svg>
+    <!-- ===== VIEW 1: LOCATION PICKER ===== -->
+    <div id="view-picker" class="studio-main" style="max-width:840px;margin:0 auto;">
+
+        <div style="margin-bottom:28px;">
+            <div style="font-size:22px;font-weight:500;letter-spacing:0.01em;color:#1a1a1a;margin-bottom:6px;">Where are you starting?</div>
+            <div class="hq-help-text" style="margin:0;">Select a location, count the SKUs there, then come back and pick the next one.</div>
         </div>
-        {% endfor %}
+
+        <div class="sc-loc-grid" id="location-btn-grid">
+            <button class="sc-loc-btn" id="loc-btn-BinDrawer" onclick="startLocation('Bin/Drawer')">
+                <span>Bin/Drawer</span>
+                <span class="sc-loc-done-label" id="done-BinDrawer" style="display:none;">✓ Done</span>
+            </button>
+            <button class="sc-loc-btn" id="loc-btn-Backstock" onclick="startLocation('Backstock')">
+                <span>Backstock</span>
+                <span class="sc-loc-done-label" id="done-Backstock" style="display:none;">✓ Done</span>
+            </button>
+            <button class="sc-loc-btn" id="loc-btn-AccessoryWall" onclick="startLocation('Accessory Wall')">
+                <span>Accessory Wall</span>
+                <span class="sc-loc-done-label" id="done-AccessoryWall" style="display:none;">✓ Done</span>
+            </button>
+            <button class="sc-loc-btn" id="loc-btn-VisualDisplay" onclick="startLocation('Visual Display')">
+                <span>Visual Display</span>
+                <span class="sc-loc-done-label" id="done-VisualDisplay" style="display:none;">✓ Done</span>
+            </button>
+            <button class="sc-loc-btn" id="loc-btn-DCR" onclick="startLocation('DCR')">
+                <span>DCR</span>
+                <span class="sc-loc-done-label" id="done-DCR" style="display:none;">✓ Done</span>
+            </button>
+            <button class="sc-loc-btn" id="loc-btn-custom-trigger" onclick="toggleCustomInput()">
+                <span id="custom-trigger-label">Custom Location...</span>
+                <span class="sc-loc-done-label" id="done-custom-trigger" style="display:none;">✓ Done</span>
+            </button>
+        </div>
+
+        <!-- Custom location input -->
+        <div id="custom-loc-wrap" style="display:none;margin-bottom:20px;display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="custom-loc-name" class="studio-search-input" placeholder="Enter location name..." style="max-width:280px;">
+            <button class="hq-btn hq-btn-lime" onclick="startCustomLocation()" style="height:40px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">Go →</button>
+            <button class="hq-btn" onclick="hideCustomInput()" style="height:40px;font-size:11px;">Cancel</button>
+        </div>
+
+        <div style="margin-top:32px;display:flex;flex-direction:column;align-items:center;gap:14px;">
+            <button id="btn-done-all" class="studio-begin-count-btn" onclick="showSummary()" disabled
+                style="opacity:0.4;cursor:not-allowed;">
+                I'm done counting all locations →
+            </button>
+            <button onclick="showSummary()"
+                style="background:none;border:none;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;font-weight:400;letter-spacing:0.1em;text-transform:uppercase;color:#999;cursor:pointer;padding:0;text-decoration:underline;">
+                Skip to Summary →
+            </button>
+        </div>
+
     </div>
 
-    <!-- ===== COUNTING VIEW ===== -->
-    <div id="counting-view" class="studio-main">
+    <!-- ===== VIEW 2: LOCATION COUNTING ===== -->
+    <div id="view-counting" class="studio-main" style="display:none;max-width:840px;margin:0 auto;">
 
-        <div class="sc-progress" id="progress-text">SKU 1 of {{ sku_items|length }}</div>
-        <div class="sc-progress-bar-wrap">
-            <div class="sc-progress-bar" id="progress-bar" style="width:0%;"></div>
+        <div style="margin-bottom:24px;">
+            <button onclick="saveAndBack()" style="background:none;border:none;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:400;letter-spacing:0.1em;text-transform:uppercase;color:#999;cursor:pointer;padding:0 0 8px 0;text-decoration:underline;">← Back to Locations</button>
+            <div style="font-size:20px;font-weight:500;letter-spacing:0.01em;color:#1a1a1a;">Counting: <span id="current-loc-name"></span></div>
+            <div class="hq-help-text" style="margin-top:4px;margin-bottom:0;">Enter the quantity of each SKU you find at this location. Zero means none found here.</div>
         </div>
 
-        <div class="sc-layout">
+        <div class="sc-sku-list" id="sku-list-container"></div>
 
-            <!-- LEFT: SKU card display -->
-            <div id="card-display-slot"></div>
-
-            <!-- RIGHT: On-hand panel -->
-            <div class="sc-onhand-panel">
-                <div id="bp-missing-warning" class="sc-missing-warning" style="display:none;">
-                    ⚠ This SKU was not found in your uploaded BP file.
-                </div>
-                <div class="sc-stat-label">Brightpearl On Hand</div>
-                <div class="sc-stat-value" id="bp-onhand-display">—</div>
-
-                <div class="sc-stat-label">Your Count</div>
-                <div class="sc-stat-value" id="your-count-display" style="color:#1a1a1a;">0</div>
-
-                <div class="sc-stat-label">Variance</div>
-                <div class="sc-stat-value-sm" id="variance-display" style="color:#999;">—</div>
-            </div>
-        </div>
-
-        <!-- Location count inputs -->
-        <div class="hq-section">
-            <div class="hq-section-heading" style="margin-bottom:16px;">Enter Your Counts by Location</div>
-
-            <div id="location-rows"></div>
-
-            <div style="margin-top:12px;">
-                <select id="location-select" class="hq-select" onchange="handleLocationSelect(this)" style="margin-left:0;height:36px;font-size:13px;">
-                    <option value="">+ Add Location...</option>
-                    <option value="Bin/Drawer">Bin/Drawer</option>
-                    <option value="Backstock">Backstock</option>
-                    <option value="Accessory Wall">Accessory Wall</option>
-                    <option value="Visual Display">Visual Display</option>
-                    <option value="DCR">DCR</option>
-                    <option value="__custom__">Custom Location</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- Navigation -->
         <div class="sc-nav-bar">
-            <button class="hq-btn" id="btn-prev" onclick="prevSku()">← Previous</button>
-            <button class="hq-btn hq-btn-lime" id="btn-next" onclick="nextSku()" style="font-weight:600;">Next SKU →</button>
-            <button class="hq-btn hq-btn-lime" id="btn-submit" onclick="showSummary()" style="display:none;font-weight:600;">Review &amp; Submit →</button>
+            <button class="hq-btn" onclick="saveAndBack()">← Back to Locations</button>
+            <button class="hq-btn hq-btn-lime" onclick="saveAndBack()" style="font-weight:600;">Next Location →</button>
         </div>
+
     </div>
 
-    <!-- ===== SUMMARY VIEW ===== -->
-    <div id="summary-view" class="studio-main" style="display:none;">
+    <!-- ===== VIEW 3: FINAL SUMMARY ===== -->
+    <div id="view-summary" class="studio-main" style="display:none;">
 
-        <div class="hq-section-heading" style="font-size:16px;margin-bottom:20px;">Stock Check Summary</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+            <div class="hq-section-heading" style="font-size:16px;margin:0;">Stock Check Summary</div>
+            <button class="hq-btn" onclick="openAddLocPanel()">+ Add Location</button>
+        </div>
 
-        <div class="sc-stats-bar">
+        <!-- Add location panel -->
+        <div class="sc-add-loc-panel" id="add-loc-panel">
+            <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#999;font-weight:400;">Add location:</span>
+            <select id="add-loc-select" class="hq-select" style="height:34px;font-size:13px;margin-left:0;">
+                <option value="">Select a location...</option>
+                <option value="Bin/Drawer">Bin/Drawer</option>
+                <option value="Backstock">Backstock</option>
+                <option value="Accessory Wall">Accessory Wall</option>
+                <option value="Visual Display">Visual Display</option>
+                <option value="DCR">DCR</option>
+                <option value="__custom__">Custom...</option>
+            </select>
+            <input type="text" id="add-loc-custom-name" class="studio-search-input" placeholder="Location name..." style="display:none;max-width:200px;">
+            <button class="hq-btn hq-btn-lime" onclick="confirmAddLocation()" style="height:34px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">Add</button>
+            <button class="hq-btn" onclick="closeAddLocPanel()" style="height:34px;font-size:11px;">Cancel</button>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="sc-stats-bar" id="summary-stats">
             <div>
                 <div class="sc-stat-label">SKUs Matched</div>
-                <div style="font-size:22px;font-weight:500;color:#2d6930;" id="summary-matched">0</div>
+                <div style="font-size:22px;font-weight:500;color:#2d6930;" id="stat-matched">0</div>
             </div>
             <div>
                 <div class="sc-stat-label">SKUs with Variance</div>
-                <div style="font-size:22px;font-weight:500;color:#c23030;" id="summary-variances">0</div>
+                <div style="font-size:22px;font-weight:500;color:#c23030;" id="stat-variances">0</div>
             </div>
             <div>
                 <div class="sc-stat-label">Total SKUs</div>
-                <div style="font-size:22px;font-weight:500;color:#1a1a1a;" id="summary-total">0</div>
+                <div style="font-size:22px;font-weight:500;color:#1a1a1a;" id="stat-total">0</div>
             </div>
         </div>
 
         <div style="overflow-x:auto;">
-            <table class="sc-summary-table">
-                <thead>
-                    <tr>
-                        <th>SKU</th>
-                        <th>Description</th>
-                        <th>BP On Hand</th>
-                        <th>Your Count</th>
-                        <th>Variance</th>
-                        <th>Flag</th>
-                    </tr>
-                </thead>
-                <tbody id="summary-table-body"></tbody>
-            </table>
+            <table class="sc-summary-table" id="summary-table"></table>
         </div>
 
-        <div class="sc-nav-bar" style="margin-top:24px;">
-            <button class="hq-btn" onclick="goBack()">← Go Back</button>
+        <div class="sc-nav-bar">
+            <button class="hq-btn" onclick="showView('picker')">← Back to Counting</button>
             <button class="hq-btn hq-btn-lime" onclick="downloadReport()" style="font-weight:600;">Download Report</button>
         </div>
+
+        <!-- Brightpearl next-step section -->
+        <div style="margin-top:48px;padding-top:32px;border-top:1px solid #e0e0e0;">
+            <p style="font-size:13px;color:#555;line-height:1.7;margin:0 0 16px 0;">
+                Once you've reviewed your variances, head into Brightpearl and make the necessary inventory adjustments. Come back here when you're done.
+            </p>
+            <div class="sc-verify-box">
+                <div style="font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#999;margin-bottom:14px;">Next Step</div>
+                <button class="studio-begin-count-btn" onclick="goToVerify()" style="font-size:12px;">
+                    Done with Brightpearl? Verify your adjustments →
+                </button>
+            </div>
+        </div>
+
     </div>
 
     {% else %}
@@ -308,277 +370,341 @@
 
     <script>
         var skuItems = {{ sku_items | tojson }};
-        var currentIndex = 0;
-        var countData = {};
+        // counts[sku_code][location_name] = quantity (non-zero only)
+        var counts = {};
+        var completedLocations = new Set();
+        var locationColumns = []; // ordered list of locations that were counted
+        var currentLocation = null;
 
-        // Initialize countData for all SKUs
-        skuItems.forEach(function(item) {
-            countData[item.sku] = [];
-        });
+        var PRESET_IDS = {
+            'Bin/Drawer':     'BinDrawer',
+            'Backstock':      'Backstock',
+            'Accessory Wall': 'AccessoryWall',
+            'Visual Display': 'VisualDisplay',
+            'DCR':            'DCR',
+        };
 
-        var PRESET_LOCATIONS = ['Bin/Drawer', 'Backstock', 'Accessory Wall', 'Visual Display', 'DCR'];
-
-        // ---- Render a SKU by index ----
-        function renderSku(index) {
-            currentIndex = index;
-            var item = skuItems[index];
-            var total = skuItems.length;
-
-            // Move the pre-rendered card into the display slot
-            var slot = document.getElementById('card-display-slot');
-            slot.innerHTML = '';
-            var cardEl = document.getElementById('sku-card-' + index).cloneNode(true);
-            cardEl.style.display = '';
-            cardEl.id = 'active-card';
-            slot.appendChild(cardEl);
-
-            // Progress
-            document.getElementById('progress-text').textContent = 'SKU ' + (index + 1) + ' of ' + total;
-            var pct = total > 1 ? (index / (total - 1)) * 100 : 100;
-            document.getElementById('progress-bar').style.width = pct + '%';
-
-            // On-hand panel
-            if (item.missing_in_bp) {
-                document.getElementById('bp-missing-warning').style.display = '';
-                document.getElementById('bp-onhand-display').textContent = '—';
-            } else {
-                document.getElementById('bp-missing-warning').style.display = 'none';
-                document.getElementById('bp-onhand-display').textContent = item.bp_onhand;
-            }
-
-            // Restore saved location rows
-            renderLocationRows(countData[item.sku] || []);
-            updateTotals();
-
-            // Nav buttons
-            document.getElementById('btn-prev').style.display = index === 0 ? 'none' : '';
-            if (index === total - 1) {
-                document.getElementById('btn-next').style.display = 'none';
-                document.getElementById('btn-submit').style.display = '';
-            } else {
-                document.getElementById('btn-next').style.display = '';
-                document.getElementById('btn-submit').style.display = 'none';
-            }
+        // ---- View switching ----
+        function showView(name) {
+            document.getElementById('view-picker').style.display   = name === 'picker'   ? '' : 'none';
+            document.getElementById('view-counting').style.display = name === 'counting' ? '' : 'none';
+            document.getElementById('view-summary').style.display  = name === 'summary'  ? '' : 'none';
+            window.scrollTo(0, 0);
         }
 
-        // ---- Save current location rows into countData ----
-        function saveCurrentCounts() {
-            var sku = skuItems[currentIndex].sku;
-            var rows = document.querySelectorAll('#location-rows .sc-location-row');
-            var locations = [];
+        // ---- Custom location input toggle ----
+        function toggleCustomInput() {
+            var wrap = document.getElementById('custom-loc-wrap');
+            var showing = wrap.style.display === 'flex';
+            wrap.style.display = showing ? 'none' : 'flex';
+            if (!showing) {
+                document.getElementById('custom-loc-name').focus();
+            }
+        }
+        function hideCustomInput() {
+            document.getElementById('custom-loc-wrap').style.display = 'none';
+            document.getElementById('custom-loc-name').value = '';
+        }
+        function startCustomLocation() {
+            var name = document.getElementById('custom-loc-name').value.trim();
+            if (!name) { document.getElementById('custom-loc-name').focus(); return; }
+            hideCustomInput();
+            startLocation(name);
+        }
+
+        // ---- Start counting a location ----
+        function startLocation(locName) {
+            currentLocation = locName;
+            if (locationColumns.indexOf(locName) === -1) {
+                locationColumns.push(locName);
+            }
+            document.getElementById('current-loc-name').textContent = locName;
+            renderSkuList();
+            showView('counting');
+        }
+
+        // ---- Render SKU list for current location ----
+        function renderSkuList() {
+            var container = document.getElementById('sku-list-container');
+            container.innerHTML = '';
+            skuItems.forEach(function(item) {
+                var savedQty = (counts[item.sku] && counts[item.sku][currentLocation]) || 0;
+                var row = document.createElement('div');
+                row.className = 'sc-sku-row';
+                row.dataset.sku = item.sku;
+
+                var imgHtml = item.image_filename
+                    ? '<div class="sc-compact-img"><img src="/database/images/' + escHtml(item.image_filename) + '" alt="' + escHtml(item.sku) + '"></div>'
+                    : '<div class="sc-compact-img sc-compact-noimg"><span>No img</span></div>';
+
+                var badgeHtml = item.status
+                    ? '<span class="sc-compact-badge sc-compact-badge-' + item.status + '">' + item.status.toUpperCase() + '</span>'
+                    : '';
+
+                var warningHtml = item.missing_in_bp
+                    ? '<span class="sc-missing-dot" title="Not found in uploaded BP file">! Not in BP</span>'
+                    : '';
+
+                row.innerHTML = '<div class="sc-compact-card">'
+                    + imgHtml
+                    + '<div class="sc-compact-info">'
+                    + badgeHtml
+                    + '<div class="studio-card-sku">' + escHtml(item.sku) + '</div>'
+                    + '<div class="studio-card-desc" style="font-size:12px;">' + escHtml(item.description) + '</div>'
+                    + '</div></div>'
+                    + warningHtml
+                    + '<input type="number" class="sc-qty-input" min="0" value="' + savedQty + '">';
+
+                container.appendChild(row);
+            });
+        }
+
+        // ---- Save current inputs to counts object ----
+        function saveLocationCounts() {
+            var rows = document.querySelectorAll('#sku-list-container .sc-sku-row');
             rows.forEach(function(row) {
-                var nameEl = row.querySelector('.loc-name-field');
-                var qtyEl = row.querySelector('.sc-qty-input');
-                var loc = nameEl ? (nameEl.tagName === 'INPUT' ? nameEl.value.trim() : nameEl.textContent.trim()) : '';
-                var qty = parseInt(qtyEl ? qtyEl.value : 0) || 0;
-                var isCustom = nameEl && nameEl.tagName === 'INPUT';
-                if (loc) {
-                    locations.push({ location: loc, qty: qty, isCustom: isCustom });
+                var sku = row.dataset.sku;
+                var qty = parseInt(row.querySelector('.sc-qty-input').value) || 0;
+                if (!counts[sku]) counts[sku] = {};
+                if (qty > 0) {
+                    counts[sku][currentLocation] = qty;
+                } else {
+                    delete counts[sku][currentLocation];
                 }
             });
-            countData[sku] = locations;
+            completedLocations.add(currentLocation);
         }
 
-        // ---- Restore location rows from saved data ----
-        function renderLocationRows(locations) {
-            document.getElementById('location-rows').innerHTML = '';
-            (locations || []).forEach(function(row) {
-                addLocationRow(row.location, row.qty, row.isCustom || false);
+        // ---- Save and return to picker ----
+        function saveAndBack() {
+            saveLocationCounts();
+            updatePickerUI();
+            showView('picker');
+        }
+
+        // ---- Update picker button states ----
+        function updatePickerUI() {
+            // Update preset buttons
+            Object.keys(PRESET_IDS).forEach(function(loc) {
+                var safeId = PRESET_IDS[loc];
+                var btn = document.getElementById('loc-btn-' + safeId);
+                var doneEl = document.getElementById('done-' + safeId);
+                if (!btn) return;
+                if (completedLocations.has(loc)) {
+                    btn.classList.add('sc-loc-btn-done');
+                    if (doneEl) doneEl.style.display = '';
+                }
             });
-        }
-
-        // ---- Add a location row ----
-        function addLocationRow(locationName, qty, isCustom) {
-            var container = document.getElementById('location-rows');
-            var rowDiv = document.createElement('div');
-            rowDiv.className = 'sc-location-row';
-
-            var nameEl;
-            if (isCustom) {
-                nameEl = document.createElement('input');
-                nameEl.type = 'text';
-                nameEl.className = 'loc-name-field studio-search-input';
-                nameEl.placeholder = 'Location name';
-                nameEl.value = locationName || '';
-                nameEl.style.cssText = 'width:180px;padding:6px 10px;font-size:13px;';
-                nameEl.addEventListener('input', updateTotals);
-            } else {
-                nameEl = document.createElement('span');
-                nameEl.className = 'loc-name-field sc-location-label';
-                nameEl.textContent = locationName || '';
-            }
-
-            var qtyInput = document.createElement('input');
-            qtyInput.type = 'number';
-            qtyInput.className = 'sc-qty-input';
-            qtyInput.value = qty !== undefined ? qty : 0;
-            qtyInput.min = 0;
-            qtyInput.addEventListener('input', updateTotals);
-
-            var removeBtn = document.createElement('button');
-            removeBtn.className = 'hq-btn';
-            removeBtn.textContent = '×';
-            removeBtn.style.cssText = 'padding:0 12px;height:32px;font-size:16px;line-height:1;flex-shrink:0;';
-            removeBtn.addEventListener('click', function() {
-                rowDiv.remove();
-                updateTotals();
+            // Check if any custom location was completed
+            var hasCustomDone = false;
+            completedLocations.forEach(function(loc) {
+                if (!PRESET_IDS[loc]) hasCustomDone = true;
             });
-
-            rowDiv.appendChild(nameEl);
-            rowDiv.appendChild(qtyInput);
-            rowDiv.appendChild(removeBtn);
-            container.appendChild(rowDiv);
-            updateTotals();
-        }
-
-        // ---- Handle location dropdown selection ----
-        function handleLocationSelect(select) {
-            var val = select.value;
-            if (!val) return;
-            select.value = '';
-            if (val === '__custom__') {
-                addLocationRow('', 0, true);
-            } else {
-                addLocationRow(val, 0, false);
+            if (hasCustomDone) {
+                var customBtn = document.getElementById('loc-btn-custom-trigger');
+                var customDone = document.getElementById('done-custom-trigger');
+                if (customBtn) customBtn.classList.add('sc-loc-btn-done');
+                if (customDone) customDone.style.display = '';
             }
-        }
-
-        // ---- Compute totals and update panel ----
-        function updateTotals() {
-            var qtyInputs = document.querySelectorAll('#location-rows .sc-qty-input');
-            var total = 0;
-            qtyInputs.forEach(function(input) {
-                total += parseInt(input.value) || 0;
-            });
-            document.getElementById('your-count-display').textContent = total;
-
-            var item = skuItems[currentIndex];
-            var bpOnhand = item.missing_in_bp ? 0 : item.bp_onhand;
-            var variance = total - bpOnhand;
-            var varEl = document.getElementById('variance-display');
-
-            if (item.missing_in_bp) {
-                varEl.textContent = '—';
-                varEl.style.color = '#999';
-            } else {
-                varEl.textContent = (variance >= 0 ? '+' : '') + variance;
-                varEl.style.color = variance === 0 ? '#2d6930' : '#c23030';
+            // Enable "done" button once at least one location is completed
+            var doneAllBtn = document.getElementById('btn-done-all');
+            if (completedLocations.size > 0) {
+                doneAllBtn.disabled = false;
+                doneAllBtn.style.opacity = '1';
+                doneAllBtn.style.cursor = 'pointer';
             }
-        }
-
-        // ---- Navigation ----
-        function prevSku() {
-            if (currentIndex > 0) {
-                saveCurrentCounts();
-                renderSku(currentIndex - 1);
-            }
-        }
-
-        function nextSku() {
-            if (currentIndex < skuItems.length - 1) {
-                saveCurrentCounts();
-                renderSku(currentIndex + 1);
-            }
-        }
-
-        function getTotalCount(sku) {
-            return (countData[sku] || []).reduce(function(sum, row) {
-                return sum + (parseInt(row.qty) || 0);
-            }, 0);
         }
 
         // ---- Show summary view ----
         function showSummary() {
-            saveCurrentCounts();
+            buildSummaryTable();
+            showView('summary');
+        }
 
+        // ---- Build summary table ----
+        function buildSummaryTable() {
+            var table = document.getElementById('summary-table');
+
+            // Header
+            var hRow = '<tr><th>SKU</th><th>Description</th>';
+            locationColumns.forEach(function(loc) {
+                hRow += '<th>' + escHtml(loc) + '</th>';
+            });
+            hRow += '<th>Counted Total</th><th>BP On Hand</th><th>Variance</th><th>Flag</th></tr>';
+
+            // Rows
             var matched = 0, variances = 0;
-            var rows = '';
-
+            var bRows = '';
             skuItems.forEach(function(item) {
                 var counted = getTotalCount(item.sku);
-                var bpOnhand = item.missing_in_bp ? 0 : item.bp_onhand;
-                var variance = counted - bpOnhand;
+                var bpQty = item.missing_in_bp ? null : item.bp_onhand;
+                var variance = bpQty !== null ? counted - bpQty : null;
 
-                if (!item.missing_in_bp && variance === 0) {
-                    matched++;
-                } else {
-                    variances++;
-                }
+                if (!item.missing_in_bp && variance === 0) matched++;
+                else variances++;
 
-                var varStyle = variance === 0 && !item.missing_in_bp ? 'color:#2d6930;' : 'color:#c23030;';
-                var varText = item.missing_in_bp ? '—' : (variance >= 0 ? '+' : '') + variance;
+                bRows += '<tr data-sku="' + escHtml(item.sku) + '">';
+                bRows += '<td><strong>' + escHtml(item.sku) + '</strong></td>';
+                bRows += '<td>' + escHtml(item.description) + '</td>';
+
+                locationColumns.forEach(function(loc) {
+                    var qty = (counts[item.sku] && counts[item.sku][loc]) || 0;
+                    bRows += '<td><input type="number" class="sc-cell-input" min="0" value="' + qty
+                        + '" data-sku="' + escHtml(item.sku) + '" data-loc="' + escHtml(loc)
+                        + '" oninput="onCellChange(this)"></td>';
+                });
+
+                bRows += '<td class="sc-counted-total" style="font-weight:600;">' + counted + '</td>';
+                bRows += '<td>' + (bpQty !== null ? bpQty : '—') + '</td>';
+
+                var varStyle = variance === null ? 'color:#999;'
+                    : (variance === 0 ? 'color:#2d6930;font-weight:600;' : 'color:#c23030;font-weight:600;');
+                var varText = variance === null ? '—' : ((variance >= 0 ? '+' : '') + variance);
+                bRows += '<td class="sc-variance-cell" style="' + varStyle + '">' + varText + '</td>';
 
                 var flag = '';
                 if (item.missing_in_bp) {
                     flag = '<span style="color:#c23030;font-size:11px;">Not found in BP file</span>';
-                } else if (Math.abs(variance) > 5) {
-                    flag = '<span style="color:#c23030;font-size:11px;">⚠ This seems off, please recount!</span>';
+                } else if (variance !== null && Math.abs(variance) > 5) {
+                    flag = '<span style="color:#c23030;font-size:11px;">&#9888; This seems off!</span>';
                 }
-
-                rows += '<tr>'
-                    + '<td><strong>' + escHtml(item.sku) + '</strong></td>'
-                    + '<td>' + escHtml(item.description) + '</td>'
-                    + '<td>' + (item.missing_in_bp ? '—' : item.bp_onhand) + '</td>'
-                    + '<td>' + counted + '</td>'
-                    + '<td style="' + varStyle + 'font-weight:600;">' + varText + '</td>'
-                    + '<td>' + flag + '</td>'
-                    + '</tr>';
+                bRows += '<td>' + flag + '</td></tr>';
             });
 
-            document.getElementById('summary-table-body').innerHTML = rows;
-            document.getElementById('summary-matched').textContent = matched;
-            document.getElementById('summary-variances').textContent = variances;
-            document.getElementById('summary-total').textContent = skuItems.length;
-
-            document.getElementById('counting-view').style.display = 'none';
-            document.getElementById('summary-view').style.display = '';
-            window.scrollTo(0, 0);
+            table.innerHTML = '<thead>' + hRow + '</thead><tbody>' + bRows + '</tbody>';
+            updateStats(matched, variances);
         }
 
-        // ---- Go back from summary ----
-        function goBack() {
-            document.getElementById('summary-view').style.display = 'none';
-            document.getElementById('counting-view').style.display = '';
-            renderSku(skuItems.length - 1);
+        function updateStats(matched, variances) {
+            document.getElementById('stat-matched').textContent   = matched;
+            document.getElementById('stat-variances').textContent = variances;
+            document.getElementById('stat-total').textContent     = skuItems.length;
         }
 
-        // ---- Download report ----
-        function downloadReport() {
-            var payload = skuItems.map(function(item) {
+        // ---- Live cell edit ----
+        function onCellChange(input) {
+            var sku = input.dataset.sku;
+            var loc = input.dataset.loc;
+            var qty = parseInt(input.value) || 0;
+            if (!counts[sku]) counts[sku] = {};
+            if (qty > 0) counts[sku][loc] = qty;
+            else delete counts[sku][loc];
+
+            var row = input.closest('tr');
+            var newTotal = getTotalCount(sku);
+            row.querySelector('.sc-counted-total').textContent = newTotal;
+
+            var item = skuItems.find(function(i) { return i.sku === sku; });
+            if (item && !item.missing_in_bp) {
+                var variance = newTotal - item.bp_onhand;
+                var varCell = row.querySelector('.sc-variance-cell');
+                varCell.textContent = (variance >= 0 ? '+' : '') + variance;
+                varCell.style.color = variance === 0 ? '#2d6930' : '#c23030';
+                varCell.style.fontWeight = '600';
+            }
+            recalcStats();
+        }
+
+        function recalcStats() {
+            var matched = 0, variances = 0;
+            skuItems.forEach(function(item) {
+                if (item.missing_in_bp) { variances++; return; }
+                var v = getTotalCount(item.sku) - item.bp_onhand;
+                if (v === 0) matched++; else variances++;
+            });
+            document.getElementById('stat-matched').textContent   = matched;
+            document.getElementById('stat-variances').textContent = variances;
+        }
+
+        // ---- Add location column ----
+        function openAddLocPanel() {
+            var panel = document.getElementById('add-loc-panel');
+            panel.style.display = 'flex';
+            document.getElementById('add-loc-select').value = '';
+            document.getElementById('add-loc-custom-name').style.display = 'none';
+        }
+        function closeAddLocPanel() {
+            document.getElementById('add-loc-panel').style.display = 'none';
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('add-loc-select').addEventListener('change', function() {
+                var customInput = document.getElementById('add-loc-custom-name');
+                customInput.style.display = this.value === '__custom__' ? '' : 'none';
+            });
+        });
+        function confirmAddLocation() {
+            var sel = document.getElementById('add-loc-select');
+            var locName = sel.value === '__custom__'
+                ? document.getElementById('add-loc-custom-name').value.trim()
+                : sel.value;
+            if (!locName) return;
+            if (locationColumns.indexOf(locName) === -1) {
+                locationColumns.push(locName);
+            }
+            buildSummaryTable();
+            closeAddLocPanel();
+        }
+
+        // ---- Helpers ----
+        function getTotalCount(sku) {
+            if (!counts[sku]) return 0;
+            return Object.values(counts[sku]).reduce(function(sum, qty) {
+                return sum + (parseInt(qty) || 0);
+            }, 0);
+        }
+
+        function buildPayload() {
+            return skuItems.map(function(item) {
                 return {
                     sku: item.sku,
                     description: item.description,
                     bp_onhand: item.missing_in_bp ? 0 : item.bp_onhand,
                     counted_total: getTotalCount(item.sku),
+                    missing_in_bp: item.missing_in_bp,
                 };
             });
+        }
 
+        // ---- Download Report ----
+        function downloadReport() {
+            var payload = buildPayload();
+            // Persist to session concurrently
+            fetch('/studio/stock-check/save-counts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            });
             fetch('/studio/stock-check/submit', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload),
             })
             .then(function(res) {
                 var disposition = res.headers.get('Content-Disposition') || '';
                 var match = disposition.match(/filename="?([^"]+)"?/);
                 var filename = match ? match[1] : 'Stock_Check.csv';
-                return res.blob().then(function(blob) {
-                    return { blob: blob, filename: filename };
-                });
+                return res.blob().then(function(blob) { return {blob: blob, filename: filename}; });
             })
-            .then(function(result) {
-                var url = URL.createObjectURL(result.blob);
+            .then(function(r) {
+                var url = URL.createObjectURL(r.blob);
                 var a = document.createElement('a');
-                a.href = url;
-                a.download = result.filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                a.href = url; a.download = r.filename;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a); URL.revokeObjectURL(url);
             })
-            .catch(function(err) {
-                alert('Error generating report: ' + err.message);
-            });
+            .catch(function(err) { alert('Error generating report: ' + err.message); });
+        }
+
+        // ---- Verify flow ----
+        function goToVerify() {
+            var payload = buildPayload();
+            fetch('/studio/stock-check/save-counts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+            })
+            .then(function() { window.location.href = '/studio/stock-check/verify'; })
+            .catch(function() { window.location.href = '/studio/stock-check/verify'; });
         }
 
         function escHtml(str) {
@@ -586,22 +712,6 @@
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
-
-        // ---- Init ----
-        document.addEventListener('DOMContentLoaded', function() {
-            // Render barcodes for all pre-rendered cards
-            skuItems.forEach(function(item, idx) {
-                try {
-                    JsBarcode('#barcode-sc-' + idx, item.sku, {
-                        format: 'CODE128', width: 1, height: 28, displayValue: false, margin: 0
-                    });
-                } catch(e) {}
-            });
-
-            if (skuItems.length > 0) {
-                renderSku(0);
-            }
-        });
     </script>
 </body>
 </html>
