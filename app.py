@@ -606,6 +606,58 @@ def studio_catalog():
                            master_filename=master_filename)
 
 
+@app.route('/studio/catalog/debug')
+@studio_login_required
+def studio_catalog_debug():
+    """Temporary diagnostic endpoint — shows what the catalog route actually sees on this server."""
+    import traceback
+    out = {}
+    out['MASTER_DIR'] = MASTER_DIR
+    out['DATABASE_DIR'] = DATABASE_DIR
+    out['IMAGES_DIR'] = IMAGES_DIR
+    msf_path = os.path.join(MASTER_DIR, 'SKU_Master.csv')
+    out['msf_path'] = msf_path
+    out['msf_exists'] = os.path.isfile(msf_path)
+    try:
+        master = load_master_skus()
+        out['master_count'] = len(master)
+        out['master_first5'] = list(master.keys())[:5]
+    except Exception:
+        out['master_error'] = traceback.format_exc()
+    try:
+        status = load_sku_status()
+        out['status_count'] = len(status)
+    except Exception:
+        out['status_error'] = traceback.format_exc()
+    try:
+        prices = load_sku_prices()
+        out['prices_count'] = len(prices)
+    except Exception:
+        out['prices_error'] = traceback.format_exc()
+    planogram_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'planogram_order.json')
+    out['planogram_exists'] = os.path.isfile(planogram_path)
+    if out['planogram_exists']:
+        with open(planogram_path) as f:
+            pdata = json.load(f)
+        all_skus = []
+        for d in pdata.get('displays', []):
+            for slot in d.get('slots', []):
+                all_skus.extend(slot.get('skus', []))
+        out['planogram_sku_count'] = len(all_skus)
+        out['planogram_first5'] = all_skus[:5]
+        if 'master_first5' in out:
+            out['sample_matches'] = {
+                s: s.strip().upper() in load_master_skus()
+                for s in all_skus[:5]
+            }
+    images_dir_exists = os.path.isdir(IMAGES_DIR)
+    out['images_dir_exists'] = images_dir_exists
+    if images_dir_exists:
+        out['images_count'] = len(os.listdir(IMAGES_DIR))
+        out['images_first3'] = os.listdir(IMAGES_DIR)[:3]
+    return jsonify(out)
+
+
 @app.route('/studio/stock-check')
 @studio_login_required
 def studio_stock_check():
