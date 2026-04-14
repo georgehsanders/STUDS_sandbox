@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>STUDS — SKU Catalog</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
         .catalog-grid {
             display: grid;
@@ -54,7 +55,7 @@
                 {% endif %}
             </div>
             <div style="text-align:center;white-space:nowrap;">
-                <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:62px;font-weight:500;letter-spacing:0.01em;color:#1a1a1a;line-height:1;">STUDS</div>
+                <a href="/studio/" style="display:block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:62px;font-weight:500;letter-spacing:0.01em;color:#1a1a1a;line-height:1;text-decoration:none;">STUDS</a>
                 <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;letter-spacing:0.14em;text-transform:uppercase;color:#1a1a1a;margin-top:4px;">Week {{ studio_week_number }}</div>
             </div>
             <div style="display:flex;justify-content:flex-end;align-items:flex-start;flex-direction:column;gap:6px;">
@@ -109,13 +110,34 @@
         var catalogDisplays = {{ displays | tojson }};
         var currentCardCount = 0;
 
+        // Establish base history entry so browser back returns to the picker view
+        history.replaceState({view: 'picker'}, '', '/studio/catalog');
+
+        window.addEventListener('popstate', function(e) {
+            var state = e.state;
+            if (state && state.view === 'list') {
+                _renderDisplay(state.displayId);
+            } else {
+                _renderPicker();
+            }
+        });
+
         function showDisplayPicker() {
+            history.back();
+        }
+
+        function _renderPicker() {
             document.getElementById('view-picker').style.display = '';
             document.getElementById('view-list').style.display = 'none';
             document.getElementById('catalog-search').value = '';
         }
 
         function showDisplay(displayId) {
+            history.pushState({view: 'list', displayId: displayId}, '', '/studio/catalog#' + displayId);
+            _renderDisplay(displayId);
+        }
+
+        function _renderDisplay(displayId) {
             document.getElementById('view-picker').style.display = 'none';
             document.getElementById('view-list').style.display = '';
             document.getElementById('catalog-search').value = '';
@@ -216,6 +238,19 @@
 
                 el.innerHTML = html;
                 grid.appendChild(el);
+
+                // Barcode (same spec as studio.html: CODE128, height 28, no text)
+                var svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                el.appendChild(svgEl);
+                try {
+                    JsBarcode(svgEl, card.skuData.sku, {
+                        format: 'CODE128',
+                        width: 1,
+                        height: 28,
+                        displayValue: false,
+                        margin: 0
+                    });
+                } catch(e) {}
             });
 
             updateCatalogCount();
