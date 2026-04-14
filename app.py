@@ -526,10 +526,14 @@ def studio_index():
                 'retail_price': price,
             })
 
+    import datetime
+    studio_week_number = (datetime.date.today() + datetime.timedelta(days=1)).isocalendar()[1]
+
     return render_template('studio.html',
                            sku_items=sku_items,
                            sku_list_filename=sku_list_filename,
-                           no_sku_list=no_sku_list)
+                           no_sku_list=no_sku_list,
+                           studio_week_number=studio_week_number)
 
 
 @app.route('/studio/tutorial')
