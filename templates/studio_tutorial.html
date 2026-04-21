@@ -6,36 +6,49 @@
     <title>STUDS — Tutorial</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
+        /* Page-level centering container */
         .studio-tutorial-wrap {
-            max-width: 600px;
-            padding: 32px 28px 60px 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: calc(100vh - 150px);
+            padding: 32px 28px;
+        }
+        /* Step blocks — constrained width, left-aligned text */
+        .studio-tutorial-step {
+            display: none;
+            max-width: 660px;
+            width: 100%;
+        }
+        .studio-tutorial-step.studio-tutorial-active {
+            display: block;
         }
         .studio-tutorial-heading {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 500;
             letter-spacing: 0.04em;
             color: #1a1a1a;
-            margin: 0 0 16px 0;
+            margin: 0 0 18px 0;
         }
         .studio-tutorial-body {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 14px;
+            font-size: 16px;
             line-height: 1.6;
             color: #1a1a1a;
-            margin: 0 0 16px 0;
+            margin: 0 0 18px 0;
         }
         .studio-tutorial-checklist {
             list-style: none;
             padding: 0;
-            margin: 0 0 24px 0;
+            margin: 0 0 28px 0;
         }
         .studio-tutorial-checklist li {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 13px;
+            font-size: 15px;
             line-height: 1.5;
             color: #1a1a1a;
-            padding: 6px 0;
+            padding: 7px 0;
             display: flex;
             align-items: flex-start;
             gap: 10px;
@@ -46,18 +59,18 @@
         }
         .studio-tutorial-sublist-label {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 13px;
+            font-size: 15px;
             font-weight: 500;
             color: #1a1a1a;
-            margin: 12px 0 6px 0;
+            margin: 14px 0 6px 0;
         }
         .studio-tutorial-sublist {
-            margin: 0 0 16px 0;
+            margin: 0 0 18px 0;
             padding-left: 20px;
         }
         .studio-tutorial-sublist li {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 13px;
+            font-size: 15px;
             line-height: 1.6;
             color: #1a1a1a;
             padding: 2px 0;
@@ -69,14 +82,14 @@
         .studio-tutorial-btn {
             display: inline-flex;
             align-items: center;
-            padding: 0 20px;
-            height: 38px;
+            padding: 0 24px;
+            height: 44px;
             white-space: nowrap;
             border: 1.5px solid #000;
             border-radius: 0;
             background: #e8b4f8;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 400;
             letter-spacing: 0.08em;
             color: #000;
@@ -106,23 +119,17 @@
         }
         .studio-tutorial-placeholder {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 13px;
+            font-size: 15px;
             font-style: italic;
             color: #999;
             margin: 0 0 16px 0;
         }
         .studio-tutorial-complete {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 15px;
+            font-size: 17px;
             font-weight: 500;
             color: #2d6930;
             margin-top: 20px;
-        }
-        .studio-tutorial-step {
-            display: none;
-        }
-        .studio-tutorial-step.studio-tutorial-active {
-            display: block;
         }
     </style>
 </head>
