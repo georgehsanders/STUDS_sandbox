@@ -659,11 +659,22 @@ def studio_index():
                 'retail_price': price,
             })
 
+    # Welcome message: neighborhood from store name, week from SKU list filename
+    store = get_store_by_id_db(session.get('store_id', ''))
+    welcome_neighborhood = parse_neighborhood(store['name']) if store else ''
+    welcome_week_number = None
+    if sku_list_filename:
+        welcome_week_number = iso_week_from_mmddyy(
+            parse_week_identifier(sku_list_filename)
+        )
+
     return render_template('studio.html',
                            sku_items=sku_items,
                            sku_list_filename=sku_list_filename,
                            no_sku_list=no_sku_list,
-                           show_start_stock_check=SHOW_START_STOCK_CHECK)
+                           show_start_stock_check=SHOW_START_STOCK_CHECK,
+                           welcome_neighborhood=welcome_neighborhood,
+                           welcome_week_number=welcome_week_number)
 
 
 def format_duration(seconds):
@@ -721,6 +732,41 @@ def parse_week_identifier(skulist_filename):
     if not m:
         return None
     return m.group(1).replace('_', '-')
+
+
+def iso_week_from_mmddyy(mmddyy):
+    """Convert a MM-DD-YY date string (from parse_week_identifier) to an ISO
+    week number (int).  Returns None if the input is malformed.
+
+    Example: '04-14-26' -> 16
+    """
+    if not mmddyy:
+        return None
+    try:
+        dt = datetime.strptime(mmddyy, '%m-%d-%y')
+        return dt.isocalendar()[1]
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_neighborhood(store_name):
+    """Strip the store number and 2-letter state code from a store name.
+
+    '001 NY Nolita'                    -> 'Nolita'
+    '002 NY Hudson Yards'              -> 'Hudson Yards'
+    '011 MA The Street, Chestnut Hill' -> 'The Street, Chestnut Hill'
+
+    Fallback: returns the full name if it doesn't match the expected
+    '<number> <2-letter-state> <rest>' pattern.
+    """
+    if not store_name:
+        return ''
+    tokens = store_name.split()
+    if len(tokens) < 3:
+        return store_name
+    if len(tokens[1]) != 2 or not tokens[1].isalpha():
+        return store_name
+    return ' '.join(tokens[2:])
 
 
 # ---------------------------------------------------------------------------
