@@ -48,6 +48,12 @@ os.makedirs(DATABASE_DIR, exist_ok=True)
 os.makedirs(MASTER_DIR, exist_ok=True)
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
+# --- Feature flags ---
+# Flip SHOW_START_STOCK_CHECK to True to restore the "Start Your Stock Check"
+# button on the studio homepage. The flow itself (/studio/stock-check/*) is
+# unaffected by this flag — only the homepage button is hidden when False.
+SHOW_START_STOCK_CHECK = False
+
 # --- Default email template ---
 DEFAULT_EMAIL_BODY = (
     "We recently completed an inventory audit and found discrepancies in the following SKUs "
@@ -656,7 +662,8 @@ def studio_index():
     return render_template('studio.html',
                            sku_items=sku_items,
                            sku_list_filename=sku_list_filename,
-                           no_sku_list=no_sku_list)
+                           no_sku_list=no_sku_list,
+                           show_start_stock_check=SHOW_START_STOCK_CHECK)
 
 
 def format_duration(seconds):
