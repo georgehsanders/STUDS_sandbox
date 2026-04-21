@@ -895,7 +895,7 @@ def mark_stock_check_abandoned(run_id):
             conn.execute(
                 "UPDATE stock_checks "
                 "SET status = 'abandoned', updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = ?",
+                "WHERE id = ? AND status != 'completed'",
                 (run_id,),
             )
             conn.commit()

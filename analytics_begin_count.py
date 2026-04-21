@@ -495,10 +495,11 @@ def get_analytics_leaderboard(range_key):
                 adjustment_pct = total_rec / denom if denom else 0.0
 
                 score = int(round(
-                    completion_pct    * SCORE_WEIGHT_COMPLETION +
-                    adjustment_pct    * SCORE_WEIGHT_ADJUSTMENT +
-                    follow_through_pct * SCORE_WEIGHT_FOLLOW_THROUGH
-                ) * 100)
+                    (completion_pct    * SCORE_WEIGHT_COMPLETION +
+                     adjustment_pct    * SCORE_WEIGHT_ADJUSTMENT +
+                     follow_through_pct * SCORE_WEIGHT_FOLLOW_THROUGH
+                    ) * 100
+                ))
 
                 scored.append({
                     'store_id': sid,
