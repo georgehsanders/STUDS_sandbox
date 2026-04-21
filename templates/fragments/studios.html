@@ -1,11 +1,65 @@
 {% from "macros.html" import sortable_th %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>var storeReconData = {{ recon_data | tojson }}; var storeAnalytics = {{ store_analytics | tojson }};</script>
+
+<style>
+.studios-header-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 0;
+}
+.studios-search-col {
+    flex: 1;
+    max-width: 400px;
+    position: relative;
+}
+.studios-search-col .hq-studios-search {
+    width: 100%;
+    box-sizing: border-box;
+}
+.studios-add-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    height: 42px;
+    align-self: flex-start;
+}
+.studios-toast {
+    display: none;
+    background: #c8f135;
+    border: 1.5px solid #000;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 10px;
+    margin-bottom: 4px;
+}
+#add-studio-modal .field-error {
+    color: #c0392b;
+    font-size: 11px;
+    margin-top: 3px;
+    display: none;
+}
+#add-studio-modal .hq-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+#add-studio-modal select.hq-input {
+    appearance: auto;
+    background: #fff;
+}
+</style>
+
 <div class="hq-studios">
-    <div class="hq-studios-search-wrap">
-        <input type="text" id="studios-search" class="hq-studios-search" placeholder="Search by studio name or number..." oninput="filterStudios()" autocomplete="off">
-        <div id="studios-dropdown" class="hq-studios-dropdown" style="display:none;"></div>
+    <div class="studios-header-row">
+        <div class="studios-search-col">
+            <input type="text" id="studios-search" class="hq-studios-search" placeholder="Search by studio name or number..." oninput="filterStudios()" autocomplete="off">
+            <div id="studios-dropdown" class="hq-studios-dropdown" style="display:none;"></div>
+        </div>
+        <button class="hq-btn hq-btn-lavender studios-add-btn" onclick="openAddStudioModal()">+ Add Studio</button>
     </div>
+
+    <div id="studios-toast" class="studios-toast"></div>
 
     <div id="studios-profile" class="hq-studios-profile" style="display:none;"></div>
 
@@ -16,9 +70,7 @@
                 <tr>
                     <th style="width:50px;">Count</th>
                     {{ sortable_th('studios-table', 1, 'string', 'Studio') }}
-                    {{ sortable_th('studios-table', 2, 'string', 'Manager') }}
-                    {{ sortable_th('studios-table', 3, 'string', 'Email') }}
-                    {{ sortable_th('studios-table', 4, 'string', 'Phone') }}
+                    {{ sortable_th('studios-table', 2, 'string', 'Region') }}
                 </tr>
             </thead>
             <tbody id="studios-tbody">
@@ -29,12 +81,165 @@
                         <span class="hq-count-dot {% if status == 'Updated' %}hq-dot-updated{% elif status == 'Discrepancy Detected' %}hq-dot-discrepancy{% elif status.startswith('Incomplete') %}hq-dot-incomplete{% else %}hq-dot-unknown{% endif %}"></span>
                     </td>
                     <td>{{ store.name }}</td>
-                    <td>{{ store.manager or '—' }}</td>
-                    <td>{{ store.email or '—' }}</td>
-                    <td>{{ store.phone or '—' }}</td>
+                    <td>{{ store.region or '—' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<!-- Add Studio Modal -->
+<div id="add-studio-modal" class="hq-modal" style="display:none;">
+    <div class="hq-modal-content" style="max-width:460px;">
+        <div class="hq-modal-header">
+            <h2>Add Studio</h2>
+            <button class="hq-modal-close" onclick="closeAddStudioModal()">&times;</button>
+        </div>
+        <div class="hq-modal-body">
+            <div class="hq-form-group">
+                <label>STUDIO NUMBER</label>
+                <input type="text" id="add-studio-number" class="hq-input" placeholder="e.g. 046" maxlength="4" autocomplete="off">
+                <div class="field-error" id="err-studio-number"></div>
+            </div>
+            <div class="hq-form-group">
+                <label>STUDIO NAME</label>
+                <input type="text" id="add-studio-name" class="hq-input" placeholder="e.g. 046 CA La Jolla" maxlength="100" autocomplete="off">
+                <div class="field-error" id="err-studio-name"></div>
+            </div>
+            <div class="hq-form-group">
+                <label>REGION</label>
+                <select id="add-studio-region" class="hq-input">
+                    <option value="">— Select region —</option>
+                    <option value="NY &amp; East Coast Metro">NY &amp; East Coast Metro</option>
+                    <option value="North Pacific">North Pacific</option>
+                    <option value="Southeast">Southeast</option>
+                    <option value="South Central">South Central</option>
+                    <option value="Northeast &amp; Central">Northeast &amp; Central</option>
+                </select>
+                <div class="field-error" id="err-studio-region"></div>
+            </div>
+            <div class="field-error" id="err-studio-general" style="font-size:12px;margin-top:4px;"></div>
+        </div>
+        <div class="hq-modal-footer">
+            <button class="hq-btn hq-btn-white" onclick="closeAddStudioModal()" style="margin-right:8px;">Cancel</button>
+            <button class="hq-btn hq-btn-lavender" id="add-studio-submit-btn" onclick="submitAddStudio()">Add Studio</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Check sessionStorage for a post-redirect success message
+(function() {
+    var added = sessionStorage.getItem('studioAdded');
+    if (added) {
+        sessionStorage.removeItem('studioAdded');
+        var toast = document.getElementById('studios-toast');
+        if (toast) {
+            toast.textContent = 'Studio ' + added + ' added successfully.';
+            toast.style.display = 'block';
+            setTimeout(function() { toast.style.display = 'none'; }, 4000);
+        }
+    }
+})();
+
+// Wire up click-outside-to-close on the modal
+(function() {
+    var modal = document.getElementById('add-studio-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeAddStudioModal();
+        });
+    }
+})();
+
+function openAddStudioModal() {
+    // Reset form
+    document.getElementById('add-studio-number').value = '';
+    document.getElementById('add-studio-name').value = '';
+    document.getElementById('add-studio-region').value = '';
+    clearFieldErrors();
+    var btn = document.getElementById('add-studio-submit-btn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Add Studio'; }
+    document.getElementById('add-studio-modal').style.display = 'flex';
+    setTimeout(function() { document.getElementById('add-studio-number').focus(); }, 50);
+}
+
+function closeAddStudioModal() {
+    document.getElementById('add-studio-modal').style.display = 'none';
+}
+
+function clearFieldErrors() {
+    ['err-studio-number', 'err-studio-name', 'err-studio-region', 'err-studio-general'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.style.display = 'none'; el.textContent = ''; }
+    });
+}
+
+function showFieldError(id, msg) {
+    var el = document.getElementById(id);
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+function submitAddStudio() {
+    clearFieldErrors();
+
+    var storeId = document.getElementById('add-studio-number').value.trim();
+    var name    = document.getElementById('add-studio-name').value.trim();
+    var region  = document.getElementById('add-studio-region').value;
+
+    var valid = true;
+    if (!storeId) {
+        showFieldError('err-studio-number', 'Studio number is required.');
+        valid = false;
+    } else if (!/^[0-9]{1,4}$/.test(storeId)) {
+        showFieldError('err-studio-number', 'Studio number must be 1–4 digits only.');
+        valid = false;
+    }
+    if (!name) {
+        showFieldError('err-studio-name', 'Studio name is required.');
+        valid = false;
+    } else if (name.length > 100) {
+        showFieldError('err-studio-name', 'Studio name must be 100 characters or fewer.');
+        valid = false;
+    }
+    var validRegions = [
+        'NY & East Coast Metro', 'North Pacific', 'Southeast',
+        'South Central', 'Northeast & Central'
+    ];
+    if (!region || validRegions.indexOf(region) === -1) {
+        showFieldError('err-studio-region', 'Please select a region.');
+        valid = false;
+    }
+    if (!valid) return;
+
+    var btn = document.getElementById('add-studio-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    fetch('/hq/studios/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({store_id: storeId, name: name, region: region})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.ok) {
+            closeAddStudioModal();
+            // Pass success message across the page reload via sessionStorage
+            sessionStorage.setItem('studioAdded', res.store_id);
+            // Full reload so storeDataGlobal in the shell is refreshed too
+            window.location.href = '/hq/?section=studios';
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Add Studio';
+            showFieldError('err-studio-general', res.error || 'An error occurred. Please try again.');
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.textContent = 'Add Studio';
+        showFieldError('err-studio-general', 'Network error. Please try again.');
+    });
+}
+</script>

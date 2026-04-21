@@ -60,47 +60,103 @@ DEFAULT_EMAIL_BODY = (
 # --- Store profiles database ---
 
 SEED_STORES = [
-    ("001", "001 NY SoHo", "America/New_York"),
-    ("002", "002 NY Williamsburg", "America/New_York"),
-    ("003", "003 NY Upper East Side", "America/New_York"),
-    ("004", "004 NY Hudson Yards", "America/New_York"),
-    ("005", "005 NY Flatiron", "America/New_York"),
-    ("006", "006 NJ Garden State Plaza", "America/New_York"),
-    ("007", "007 NJ Short Hills", "America/New_York"),
-    ("008", "008 CT Westfield", "America/New_York"),
-    ("009", "009 MA Newbury Street", "America/New_York"),
-    ("010", "010 MA Burlington", "America/New_York"),
-    ("011", "011 PA King of Prussia", "America/New_York"),
-    ("012", "012 PA Rittenhouse", "America/New_York"),
-    ("013", "013 DC Georgetown", "America/New_York"),
-    ("014", "014 FL Aventura", "America/New_York"),
-    ("015", "015 FL Dadeland", "America/New_York"),
-    ("016", "016 FL Sawgrass", "America/New_York"),
-    ("017", "017 FL International Plaza", "America/New_York"),
-    ("018", "018 GA Lenox Square", "America/New_York"),
-    ("019", "019 GA Avalon", "America/New_York"),
-    ("020", "020 TX NorthPark", "America/Chicago"),
-    ("021", "021 TX Domain", "America/Chicago"),
-    ("022", "022 TX Galleria", "America/Chicago"),
-    ("023", "023 IL Michigan Ave", "America/Chicago"),
-    ("024", "024 IL Oakbrook", "America/Chicago"),
-    ("025", "025 MN Mall of America", "America/Chicago"),
-    ("026", "026 CO Cherry Creek", "America/Denver"),
-    ("027", "027 CO Park Meadows", "America/Denver"),
-    ("028", "028 AZ Scottsdale Fashion", "America/Phoenix"),
-    ("029", "029 AZ Biltmore", "America/Phoenix"),
-    ("030", "030 NV Fashion Show", "America/Los_Angeles"),
-    ("031", "031 CA Beverly Center", "America/Los_Angeles"),
-    ("032", "032 CA Century City", "America/Los_Angeles"),
-    ("033", "033 CA Fashion Island", "America/Los_Angeles"),
-    ("034", "034 CA Stanford", "America/Los_Angeles"),
-    ("035", "035 CA UTC San Diego", "America/Los_Angeles"),
-    ("036", "036 CA Santa Monica", "America/Los_Angeles"),
-    ("037", "037 WA Bellevue Square", "America/Los_Angeles"),
-    ("038", "038 WA University Village", "America/Los_Angeles"),
-    ("039", "039 OR Pioneer Place", "America/Los_Angeles"),
-    ("040", "040 HI Ala Moana", "Pacific/Honolulu"),
+    ("001", "001 NY Nolita", "America/New_York"),
+    ("002", "002 NY Hudson Yards", "America/New_York"),
+    ("006", "006 CA Century City", "America/New_York"),
+    ("007", "007 NY Upper East Side", "America/New_York"),
+    ("008", "008 TX Domain Northside", "America/New_York"),
+    ("009", "009 FL Wynwood", "America/New_York"),
+    ("010", "010 MA Back Bay", "America/New_York"),
+    ("011", "011 MA The Street, Chestnut Hill", "America/New_York"),
+    ("012", "012 TN Fifth and Broadway", "America/New_York"),
+    ("014", "014 WA Capitol Hill", "America/New_York"),
+    ("015", "015 SC King Street", "America/New_York"),
+    ("016", "016 TX Rice Village", "America/New_York"),
+    ("017", "017 WI State Street", "America/New_York"),
+    ("018", "018 LA Magazine Street", "America/New_York"),
+    ("019", "019 TX West Village", "America/New_York"),
+    ("020", "020 DC Georgetown", "America/New_York"),
+    ("021", "021 IL Gold Coast", "America/New_York"),
+    ("022", "022 MA Seaport", "America/New_York"),
+    ("023", "023 NY Flatiron", "America/New_York"),
+    ("024", "024 NY Rockefeller Center", "America/New_York"),
+    ("025", "025 GA Ponce", "America/New_York"),
+    ("026", "026 NY Meatpacking", "America/New_York"),
+    ("027", "027 TX South Congress", "America/New_York"),
+    ("028", "028 CA UTC San Diego", "America/New_York"),
+    ("029", "029 MA Harvard Square", "America/New_York"),
+    ("030", "030 DC Union Market", "America/New_York"),
+    ("031", "031 CA Westfield Topanga", "America/New_York"),
+    ("032", "032 CA Irvine Spectrum", "America/New_York"),
+    ("033", "033 CA Fashion Island", "America/New_York"),
+    ("034", "034 TX Lovers Lane", "America/New_York"),
+    ("035", "035 FL Hyde Park Village", "America/New_York"),
+    ("036", "036 CA Abbot Kinney", "America/New_York"),
+    ("037", "037 TX Heights Mercantile", "America/New_York"),
+    ("038", "038 CA Valley Fair", "America/New_York"),
+    ("039", "039 VA Tysons Corner", "America/New_York"),
+    ("040", "040 TX Houston Galleria", "America/New_York"),
+    ("041", "041 NV Grand Canal Shoppes", "America/New_York"),
+    ("042", "042 CA Roseville", "America/New_York"),
+    ("043", "043 IL Plaza Del Lago", "America/New_York"),
+    ("044", "044 HI Ala Moana", "America/New_York"),
+    ("045", "045 MN Mall of America", "America/New_York"),
 ]
+
+# Real studio data with region — used for the one-time data migration.
+# SEED_STORES above does not carry region because the DB schema migration adds that
+# column first; region is populated separately by migrate_to_real_studios().
+REAL_STUDIOS = [
+    ("001", "001 NY Nolita",                      "NY & East Coast Metro"),
+    ("002", "002 NY Hudson Yards",                "NY & East Coast Metro"),
+    ("006", "006 CA Century City",                "North Pacific"),
+    ("007", "007 NY Upper East Side",             "NY & East Coast Metro"),
+    ("008", "008 TX Domain Northside",            "South Central"),
+    ("009", "009 FL Wynwood",                     "Southeast"),
+    ("010", "010 MA Back Bay",                    "Northeast & Central"),
+    ("011", "011 MA The Street, Chestnut Hill",   "Northeast & Central"),
+    ("012", "012 TN Fifth and Broadway",          "Southeast"),
+    ("014", "014 WA Capitol Hill",                "North Pacific"),
+    ("015", "015 SC King Street",                 "Southeast"),
+    ("016", "016 TX Rice Village",                "South Central"),
+    ("017", "017 WI State Street",                "Northeast & Central"),
+    ("018", "018 LA Magazine Street",             "Southeast"),
+    ("019", "019 TX West Village",                "South Central"),
+    ("020", "020 DC Georgetown",                  "Northeast & Central"),
+    ("021", "021 IL Gold Coast",                  "Northeast & Central"),
+    ("022", "022 MA Seaport",                     "Northeast & Central"),
+    ("023", "023 NY Flatiron",                    "NY & East Coast Metro"),
+    ("024", "024 NY Rockefeller Center",          "NY & East Coast Metro"),
+    ("025", "025 GA Ponce",                       "Southeast"),
+    ("026", "026 NY Meatpacking",                 "NY & East Coast Metro"),
+    ("027", "027 TX South Congress",              "South Central"),
+    ("028", "028 CA UTC San Diego",               "North Pacific"),
+    ("029", "029 MA Harvard Square",              "Northeast & Central"),
+    ("030", "030 DC Union Market",                "Northeast & Central"),
+    ("031", "031 CA Westfield Topanga",           "North Pacific"),
+    ("032", "032 CA Irvine Spectrum",             "North Pacific"),
+    ("033", "033 CA Fashion Island",              "North Pacific"),
+    ("034", "034 TX Lovers Lane",                 "South Central"),
+    ("035", "035 FL Hyde Park Village",           "Southeast"),
+    ("036", "036 CA Abbot Kinney",                "North Pacific"),
+    ("037", "037 TX Heights Mercantile",          "South Central"),
+    ("038", "038 CA Valley Fair",                 "North Pacific"),
+    ("039", "039 VA Tysons Corner",               "Northeast & Central"),
+    ("040", "040 TX Houston Galleria",            "South Central"),
+    ("041", "041 NV Grand Canal Shoppes",         "North Pacific"),
+    ("042", "042 CA Roseville",                   "North Pacific"),
+    ("043", "043 IL Plaza Del Lago",              "Northeast & Central"),
+    ("044", "044 HI Ala Moana",                   "North Pacific"),
+    ("045", "045 MN Mall of America",             "Northeast & Central"),
+]
+
+VALID_REGIONS = {
+    'NY & East Coast Metro',
+    'North Pacific',
+    'Southeast',
+    'South Central',
+    'Northeast & Central',
+}
 
 
 def get_db():
@@ -108,6 +164,30 @@ def get_db():
     conn = sqlite3.connect(STORE_DB)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def migrate_to_real_studios(conn):
+    """One-time migration: replace old dummy studio data with the real studio list.
+
+    Detects dummy data by checking for the known old name '001 NY SoHo'.
+    Idempotent: if the real data is already in place (or the DB was freshly seeded
+    from the updated SEED_STORES), the function returns immediately.
+
+    Must be called AFTER the schema migration that adds the 'region' column.
+    """
+    has_dummy = conn.execute(
+        "SELECT 1 FROM stores WHERE name = '001 NY SoHo'"
+    ).fetchone()
+    if not has_dummy:
+        return
+    conn.execute('DELETE FROM stores')
+    for store_id, name, region in REAL_STUDIOS:
+        pw_hash = bcrypt.hashpw(store_id.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        conn.execute(
+            "INSERT INTO stores (store_id, name, timezone, username, password_hash, region) "
+            "VALUES (?, ?, 'America/New_York', ?, ?, ?)",
+            (store_id, name, store_id, pw_hash, region),
+        )
 
 
 def init_store_db():
@@ -132,12 +212,14 @@ def init_store_db():
                 'INSERT OR IGNORE INTO stores (store_id, name, timezone, username, password_hash) VALUES (?, ?, ?, ?, ?)',
                 (store_id, name, tz, store_id, pw_hash)
             )
-    # Add columns if missing
+    # Add columns if missing (schema migrations — run before data migration)
     existing = [row[1] for row in conn.execute('PRAGMA table_info(stores)').fetchall()]
     if 'manager' not in existing:
         conn.execute("ALTER TABLE stores ADD COLUMN manager TEXT DEFAULT ''")
     if 'phone' not in existing:
         conn.execute("ALTER TABLE stores ADD COLUMN phone TEXT DEFAULT ''")
+    if 'region' not in existing:
+        conn.execute("ALTER TABLE stores ADD COLUMN region TEXT DEFAULT ''")
     # Create hq_users table
     conn.execute('''CREATE TABLE IF NOT EXISTS hq_users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +237,9 @@ def init_store_db():
             "INSERT INTO hq_users (username, password_hash, display_name, email) VALUES (?, ?, ?, ?)",
             ('jasmine.vu', pw_hash, 'Jasmine Vu', 'jasmine.vu@studs.com')
         )
+    conn.commit()
+    # Data migration: replace dummy studios with real list (idempotent)
+    migrate_to_real_studios(conn)
     conn.commit()
     conn.close()
 
@@ -185,6 +270,14 @@ def get_all_stores_db():
     rows = conn.execute('SELECT * FROM stores ORDER BY store_id').fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_store_by_id_db(store_id):
+    """Look up a store by store_id. Returns a dict or None."""
+    conn = get_db()
+    row = conn.execute('SELECT * FROM stores WHERE store_id = ?', (store_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def check_password(stored_hash, password):
@@ -1774,6 +1867,50 @@ def hq_studios_update_store():
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+@app.route('/hq/studios/add', methods=['POST'])
+@hq_login_required
+def hq_studios_add():
+    """Create a new studio. Validates input, checks uniqueness, inserts into the DB,
+    and sets default credentials (username = password = store_id, bcrypt-hashed)."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data received'}), 400
+
+    store_id = (data.get('store_id') or '').strip()
+    name = (data.get('name') or '').strip()
+    region = (data.get('region') or '').strip()
+
+    if not store_id:
+        return jsonify({'ok': False, 'error': 'Studio number is required'}), 400
+    if not re.match(r'^[0-9]{1,4}$', store_id):
+        return jsonify({'ok': False, 'error': 'Studio number must be 1–4 digits (numbers only)'}), 400
+    if not name:
+        return jsonify({'ok': False, 'error': 'Studio name is required'}), 400
+    if len(name) > 100:
+        return jsonify({'ok': False, 'error': 'Studio name must be 100 characters or fewer'}), 400
+    if region not in VALID_REGIONS:
+        return jsonify({'ok': False, 'error': 'Please select a valid region'}), 400
+
+    conn = get_db()
+    try:
+        existing = conn.execute('SELECT 1 FROM stores WHERE store_id = ?', (store_id,)).fetchone()
+        if existing:
+            return jsonify({'ok': False, 'error': f'Studio {store_id} already exists in the list'}), 400
+        pw_hash = bcrypt.hashpw(store_id.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        conn.execute(
+            "INSERT INTO stores "
+            "(store_id, name, timezone, username, password_hash, email, manager, phone, region) "
+            "VALUES (?, ?, 'America/New_York', ?, ?, '', '', '', ?)",
+            (store_id, name, store_id, pw_hash, region),
+        )
+        conn.commit()
+        return jsonify({'ok': True, 'store_id': store_id})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/hq/goto-studio')
