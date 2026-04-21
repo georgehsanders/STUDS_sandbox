@@ -288,6 +288,59 @@
         .step7-summary-value { font-weight: 500; text-align: right; word-break: break-all; }
         .step7-summary-value-green { font-weight: 600; color: #2d6930; text-align: right; }
         .step7-summary-value-red   { font-weight: 600; color: #c23030; text-align: right; }
+
+        /* ---- Step indicator ---- */
+        #step-indicator {
+            padding: 14px 32px 0 32px;
+        }
+        .si-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+        .step-indicator-node {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            flex-shrink: 0;
+            transition: background 0.12s;
+            user-select: none;
+        }
+        .si-line {
+            flex: 1;
+            max-width: 60px;
+            height: 1.5px;
+            background: #e0e0e0;
+            transition: background 0.12s;
+        }
+        .si-completed {
+            background: #e8b4f8;
+            border: 1.5px solid #000;
+            color: #000;
+            cursor: pointer;
+        }
+        .si-completed:hover { background: #d9a0ec; }
+        .si-current {
+            background: #fff;
+            border: 2.5px solid #000;
+            color: #000;
+            font-weight: 700;
+            cursor: default;
+        }
+        .si-locked {
+            background: #f0f0f0;
+            border: 1.5px solid #e0e0e0;
+            color: #bbb;
+            cursor: not-allowed;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
@@ -326,6 +379,25 @@
         </div>
         <hr style="border:none;border-top:1px solid #e0e0e0;margin:0;padding:0;width:100%;">
     </header>
+
+    <!-- Step indicator — hidden on intro screen, shown on steps 1–7 -->
+    <div id="step-indicator" style="display:none;">
+        <div class="si-row">
+            <div class="step-indicator-node si-locked" id="si-node-1" onclick="onIndicatorNodeClick(1)">1</div>
+            <div class="si-line" id="si-line-1"></div>
+            <div class="step-indicator-node si-locked" id="si-node-2" onclick="onIndicatorNodeClick(2)">2</div>
+            <div class="si-line" id="si-line-2"></div>
+            <div class="step-indicator-node si-locked" id="si-node-3" onclick="onIndicatorNodeClick(3)">3</div>
+            <div class="si-line" id="si-line-3"></div>
+            <div class="step-indicator-node si-locked" id="si-node-4" onclick="onIndicatorNodeClick(4)">4</div>
+            <div class="si-line" id="si-line-4"></div>
+            <div class="step-indicator-node si-locked" id="si-node-5" onclick="onIndicatorNodeClick(5)">5</div>
+            <div class="si-line" id="si-line-5"></div>
+            <div class="step-indicator-node si-locked" id="si-node-6" onclick="onIndicatorNodeClick(6)">6</div>
+            <div class="si-line" id="si-line-6"></div>
+            <div class="step-indicator-node si-locked" id="si-node-7" onclick="onIndicatorNodeClick(7)">7</div>
+        </div>
+    </div>
 
     <div class="studio-tutorial-wrap">
 
@@ -555,8 +627,11 @@
                     </div>
                 </div>
 
-                <!-- Section 4: Back to Dashboard -->
-                <a href="/studio/" class="studio-tutorial-btn" style="background:#c8f135;text-decoration:none;">Back to Dashboard</a>
+                <!-- Section 4: Back to Dashboard + Reset -->
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <a href="/studio/" class="studio-tutorial-btn" style="background:#c8f135;text-decoration:none;">Back to Dashboard</a>
+                    <button class="studio-tutorial-btn" onclick="startNewStockCheck()" style="background:#fff;border:1.5px solid #000;">Start a new Stock Check</button>
+                </div>
 
             </div>
         </div>
@@ -577,6 +652,16 @@
         var bpVerifyFilenomeSvr = {{ bp_verify_filename | tojson }};
         var crosscheckRowsSvr   = {{ crosscheck_rows | tojson }};
         var summarySvr          = {{ summary | tojson }};
+        var stepStatusFromSvr   = {{ step_status | tojson }};
+
+        // Client-side step tracking (mutable, updated by goToStep)
+        var currentClientStep = currentStepFromServer;
+        var stepDoneMap = {};
+        (function() {
+            stepStatusFromSvr.forEach(function(s) {
+                stepDoneMap[s.step_num] = (s.status === 'completed');
+            });
+        })();
 
         var STEP_ID_TO_NUM = {
             'step-intro': 0,
@@ -625,9 +710,15 @@
             document.getElementById(id).classList.add('studio-tutorial-active');
             window.scrollTo(0, 0);
 
-            var stepNum = STEP_ID_TO_NUM[id];
-            if (stepNum !== undefined) {
-                saveStep(stepNum);
+            var targetNum = STEP_ID_TO_NUM[id];
+            if (targetNum !== undefined) {
+                // If advancing forward, mark the step we're leaving as done
+                if (targetNum > currentClientStep && currentClientStep >= 1 && currentClientStep <= 7) {
+                    stepDoneMap[currentClientStep] = true;
+                }
+                currentClientStep = targetNum;
+                updateStepIndicator(currentClientStep);
+                saveStep(targetNum);
             }
         }
 
@@ -869,6 +960,59 @@
                 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
+        // ---- Step indicator ----
+
+        function updateStepIndicator(stepNum) {
+            var ind = document.getElementById('step-indicator');
+            if (!ind) return;
+            // Show only when inside the flow (steps 1–7)
+            ind.style.display = (stepNum >= 1) ? '' : 'none';
+            for (var i = 1; i <= 7; i++) {
+                var node = document.getElementById('si-node-' + i);
+                if (!node) continue;
+                node.className = 'step-indicator-node';
+                if (i === stepNum) {
+                    node.classList.add('si-current');
+                } else if (stepDoneMap[i]) {
+                    node.classList.add('si-completed');
+                } else {
+                    node.classList.add('si-locked');
+                }
+            }
+            // Update connector line colors (line i connects node i → node i+1)
+            for (var j = 1; j <= 6; j++) {
+                var line = document.getElementById('si-line-' + j);
+                if (line) line.style.background = stepDoneMap[j] ? '#000' : '#e0e0e0';
+            }
+        }
+
+        function onIndicatorNodeClick(stepNum) {
+            if (stepNum === currentClientStep) return;    // already here
+            if (!stepDoneMap[stepNum]) return;            // locked — silent
+            goToStep(NUM_TO_STEP_ID[stepNum]);
+        }
+
+        // ---- Step 7: reset ----
+
+        function startNewStockCheck() {
+            if (!confirm('Are you sure? This will clear everything from this Stock Check.')) return;
+            fetch('/studio/tutorial/reset', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    window.location.href = '/studio/tutorial';
+                } else {
+                    alert('Reset failed: ' + (data.error || 'Unknown error.'));
+                }
+            })
+            .catch(function(err) {
+                alert('Reset failed: ' + err.message);
+            });
+        }
+
         // ---- Step 7: fresh BP verify upload, crosscheck table, summary ----
 
         function showStep7Status(type, message) {
@@ -980,7 +1124,7 @@
 
         document.addEventListener('DOMContentLoaded', function() {
 
-            // Restore step from session
+            // Restore step from session and initialize indicator
             if (currentStepFromServer > 0) {
                 var targetId = NUM_TO_STEP_ID[currentStepFromServer];
                 if (targetId) {
@@ -991,6 +1135,7 @@
                     document.getElementById(targetId).classList.add('studio-tutorial-active');
                 }
             }
+            updateStepIndicator(currentClientStep);
 
             // Step 1 advance button: enable if upload already done this session
             if (bpUploadDone) {

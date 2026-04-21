@@ -631,6 +631,26 @@ def studio_tutorial():
             'completed_at': '',  # not recorded on resume
         }
 
+    # Step indicator: compute completion state per step (1–7)
+    _done_map = {
+        1: bool(session.get('begin_count_bp_onhand')),
+        2: bool(session.get('begin_count_step2_done')),
+        3: bool(session.get('begin_count_step3_done')),
+        4: bool(session.get('begin_count_oc_counted')),
+        5: bool(session.get('begin_count_step5_done')),
+        6: bool(session.get('begin_count_step6_done')),
+        7: bool(session.get('begin_count_bp_verify_onhand')),
+    }
+    step_status = []
+    for _num in range(1, 8):
+        if _num == current_step:
+            _status = 'current'
+        elif _done_map[_num]:
+            _status = 'completed'
+        else:
+            _status = 'locked'
+        step_status.append({'step_num': _num, 'status': _status})
+
     return render_template('studio_tutorial.html',
                            current_step=current_step,
                            current_store_id=current_store_id,
@@ -648,7 +668,8 @@ def studio_tutorial():
                            bp_verify_filename=bp_verify_filename,
                            bp_verify_matched_rows=bp_verify_matched_rows,
                            crosscheck_rows=crosscheck_rows,
-                           summary=summary)
+                           summary=summary,
+                           step_status=step_status)
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])
@@ -662,7 +683,19 @@ def studio_tutorial_step():
         return jsonify({'ok': False, 'error': 'Missing step field'}), 400
     if not isinstance(step, int) or step < 0 or step > 7:
         return jsonify({'ok': False, 'error': 'step must be an integer 0–7'}), 400
+    old_step = session.get('begin_count_step', 0)
     session['begin_count_step'] = step
+    # When advancing forward, mark the step being left as done.
+    # Steps 1, 4, 7 use data-presence checks; only 2, 3, 5, 6 need explicit flags.
+    if step > old_step:
+        _done_flags = {
+            2: 'begin_count_step2_done',
+            3: 'begin_count_step3_done',
+            5: 'begin_count_step5_done',
+            6: 'begin_count_step6_done',
+        }
+        if old_step in _done_flags:
+            session[_done_flags[old_step]] = True
     return jsonify({'ok': True})
 
 
@@ -976,6 +1009,28 @@ def studio_tutorial_upload_bp_verify():
         })
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/studio/tutorial/reset', methods=['POST'])
+@studio_login_required
+def studio_tutorial_reset():
+    """Clear all Begin Count session keys. Never touches any Start Your Stock Check keys."""
+    _keys = [
+        'begin_count_step',
+        'begin_count_bp_onhand',
+        'begin_count_bp_filename',
+        'begin_count_oc_counted',
+        'begin_count_oc_filename',
+        'begin_count_bp_verify_onhand',
+        'begin_count_bp_verify_filename',
+        'begin_count_step2_done',
+        'begin_count_step3_done',
+        'begin_count_step5_done',
+        'begin_count_step6_done',
+    ]
+    for key in _keys:
+        session.pop(key, None)
+    return jsonify({'ok': True})
 
 
 @app.route('/studio/omnicounts', methods=['GET', 'POST'])
