@@ -533,9 +533,14 @@
 
         <!-- STEP 3 -->
         <div class="studio-tutorial-step" id="step-3">
-            <h2 class="studio-tutorial-heading">Step 3: Count This Week's Assigned SKUs</h2>
-            <p class="studio-tutorial-body">Begin counting this week's assigned SKUs using the OmniCounts app on your mobile device. The list below is for your reference.</p>
-            <p class="studio-tutorial-body">Once all counts are finalized and complete, go into the OmniCounts Dashboard and select "Soft Close" followed by "Close Inventory."</p>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:24px;">
+                <div style="flex:1;min-width:0;">
+                    <h2 class="studio-tutorial-heading">Step 3: Count This Week's Assigned SKUs</h2>
+                    <p class="studio-tutorial-body">Begin counting this week's assigned SKUs using the OmniCounts app on your mobile device. The list below is for your reference.</p>
+                    <p class="studio-tutorial-body" style="margin-bottom:0;">Once all counts are finalized and complete, go into the OmniCounts Dashboard and select "Soft Close" followed by "Close Inventory."</p>
+                </div>
+                <button class="studio-tutorial-btn" style="flex-shrink:0;align-self:center;margin-top:0;" onclick="handleStep3Print()">Print SKU List</button>
+            </div>
             {% if skulist_filename %}
             <div class="studio-search-bar" style="margin-bottom:16px;">
                 <input type="text" id="step3-search" class="studio-search-input" placeholder="Search SKUs or descriptions..." oninput="filterStep3Cards()">
@@ -720,6 +725,27 @@
 
     </div>
 
+    <!-- Step 3 Print Modal (mirrors #studio-print-modal in studio.html, scoped to Step 3) -->
+    <div id="step3-print-modal" class="studio-print-modal" style="display:none;">
+        <div class="studio-print-modal-content">
+            <div class="studio-print-modal-header">
+                <h2>Print Options</h2>
+                <button class="studio-print-modal-close" onclick="closeStep3PrintModal()">&times;</button>
+            </div>
+            <div class="studio-print-modal-body">
+                <button class="studio-print-modal-btn" onclick="executeStep3Print('all')">
+                    PRINT ALL <span id="step3-print-all-count"></span> SKUS
+                </button>
+                <button class="studio-print-modal-btn" onclick="executeStep3Print('filtered')">
+                    PRINT <span id="step3-print-filtered-count"></span> MATCHING SKUS
+                </button>
+                <div class="studio-print-modal-cancel">
+                    <a href="#" onclick="event.preventDefault(); closeStep3PrintModal();">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         var currentStepFromServer = {{ current_step | tojson }};
         var bpUploadDone      = {{ bp_upload_done | tojson }};
@@ -890,6 +916,55 @@
                 countEl.textContent = 'Showing ' + visible + ' of ' + totalStep3Skus + ' SKUs';
             } else {
                 countEl.textContent = totalStep3Skus + ' SKUs assigned this week — ' + step3SkuFilename;
+            }
+        }
+
+        // ---- Step 3: Print SKU List ----
+        // Mirrors handlePrint() / executePrint() / closePrintModal() from studio.html,
+        // adapted for Step 3's search input (#step3-search) and grid (#step3-grid).
+
+        function handleStep3Print() {
+            var searchEl = document.getElementById('step3-search');
+            var searchVal = searchEl ? searchEl.value.trim() : '';
+            if (!searchVal) {
+                executeStep3Print('all');
+            } else {
+                document.getElementById('step3-print-all-count').textContent = totalStep3Skus;
+                document.getElementById('step3-print-filtered-count').textContent = getStep3VisibleCount();
+                document.getElementById('step3-print-modal').style.display = 'flex';
+            }
+        }
+
+        function getStep3VisibleCount() {
+            var cards = document.querySelectorAll('#step3-grid .studio-card');
+            var visible = 0;
+            cards.forEach(function(card) {
+                if (card.style.display !== 'none') visible++;
+            });
+            return visible;
+        }
+
+        function closeStep3PrintModal() {
+            document.getElementById('step3-print-modal').style.display = 'none';
+        }
+
+        function executeStep3Print(mode) {
+            closeStep3PrintModal();
+            if (mode === 'all') {
+                var cards = document.querySelectorAll('#step3-grid .studio-card');
+                var hiddenCards = [];
+                cards.forEach(function(card) {
+                    if (card.style.display === 'none') {
+                        hiddenCards.push(card);
+                        card.style.display = '';
+                    }
+                });
+                window.print();
+                hiddenCards.forEach(function(card) {
+                    card.style.display = 'none';
+                });
+            } else {
+                window.print();
             }
         }
 
@@ -1380,6 +1455,14 @@
                     showStep7Status('success',
                         '\u2713 ' + bpVerifyFilenomeSvr + ' \u2014 already uploaded this session.');
                 }
+            }
+
+            // Step 3 print modal: close on outside click
+            var step3Modal = document.getElementById('step3-print-modal');
+            if (step3Modal) {
+                step3Modal.addEventListener('click', function(e) {
+                    if (e.target === this) closeStep3PrintModal();
+                });
             }
 
             // Step 7 drag-and-drop
