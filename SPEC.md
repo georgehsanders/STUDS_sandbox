@@ -92,7 +92,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] ARCHIVE link navigates to the archive browser page
 
 ### Store Table
-- [ ] One row per store (all 40 seeded stores always shown, plus any extra variance files)
+- [ ] One row per store (all seeded stores always shown — 41 real studios in sandbox; count grows as studios are added — plus any extra variance files)
 - [ ] Columns: expand arrow | Studio name | Status badge | Assigned SKUs | Discrepancies | Net Discrepancy
 - [ ] Status badge colors: Updated (green), Discrepancy Detected (red), Incomplete (gray)
 - [ ] Stores with no variance file show "Incomplete (missing file)"
@@ -195,12 +195,25 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Dropdown hides when query has 0 matches or more than 5
 
 ### Studios Table
-- [ ] Table with columns: Count (status dot) | Studio | Manager | Email | Phone
+
+> **⚠️ Updated in sandbox:** Manager, Email, and Phone columns removed from the table; Region column added. See Sandbox Changes section for detail.
+
+- [ ] Table with columns: Count (status dot) | Studio | Region
 - [ ] Status dot colors: green (Updated), red (Discrepancy Detected), gray (Incomplete), hollow/unknown (no data)
-- [ ] Studio and Manager columns are sortable by clicking headers
-- [ ] Email and Phone columns are sortable by clicking headers
-- [ ] Empty fields show dash (---)
+- [ ] Studio and Region columns are sortable by clicking headers
+- [ ] Region shows dash (—) if not populated
 - [ ] Clicking a row opens that studio's profile panel
+- [ ] "+ Add Studio" button at top right of search row opens the Add Studio modal
+
+### Add Studio Modal
+- [ ] Modal with three fields: Studio Number (text, 1–4 digits, leading zeros preserved), Studio Name (text, max 100 chars), Region (dropdown, 5 options)
+- [ ] Client-side validation: all fields required, studio number matches `/^[0-9]{1,4}$/`, name max 100 chars, region must be one of the 5 valid values
+- [ ] Inline field-level error messages on validation failure; modal stays open
+- [ ] Submit POSTs to `POST /hq/studios/add`
+- [ ] Server-side validation: same rules as client-side, plus uniqueness check on store_id
+- [ ] On duplicate store_id, server returns error; displayed inline in modal without closing
+- [ ] On success: modal closes, page reloads to Studios section, success toast appears (via sessionStorage handoff across reload)
+- [ ] New studio can immediately log in to the Studio portal with store number as both username and password
 
 ### Studio Profile Panel
 - [ ] Appears above the table when a studio is selected
@@ -363,7 +376,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] "Email Settings" card links to `/hq/settings/email`
 
 ### Login Credentials (`/hq/settings/credentials`)
-- [ ] Table with one row per studio (all 40 stores)
+- [ ] Table with one row per studio (41 real studios; count grows as studios are added via the Add Studio modal)
 - [ ] Each row shows: Store name, Username input, Password input
 - [ ] Username inputs are pre-populated with current values
 - [ ] Password inputs are blank with placeholder "Leave blank to keep"
@@ -559,7 +572,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Stores with unrecognized variance file schema get "Incomplete (unrecognized file format)"
 - [ ] Multiple SKU lists: most recent (by filename date) is used, warning shown
 - [ ] Multiple audit trails: most recent (by filename date) is used, warning shown
-- [ ] Store list always includes all 40 seeded stores from database, regardless of file presence
+- [ ] Store list always includes all seeded stores from database (41 real studios in sandbox), regardless of file presence
 
 ---
 
@@ -710,3 +723,115 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - Cleared on reset
 
 **Files touched:** `app.py`, `templates/studio_tutorial.html`
+
+---
+
+### HQ Studios Management
+
+> All changes in this subsection are scoped to the HQ portal studios section. No Begin Count files, no Start Your Stock Check files, no `hq_shell.html` profile panel, no `reconcile.py`, and no existing HQ credentials routes were modified.
+
+---
+
+#### Real Studios List Replacement
+
+**What was built:** The 40-entry dummy `SEED_STORES` list (placeholder locations like "001 NY SoHo") was replaced with the real 41-studio Studs list. A one-time startup data migration detects and replaces dummy rows.
+
+**`SEED_STORES` in `app.py`:** Now holds the real 41 studios as `(store_id, name, 'America/New_York')` tuples. Timezone is `America/New_York` for all entries — accurate per-region timezone mapping is deferred to future work. Store number gaps (003–005, 013) are intentional and preserved.
+
+**`REAL_STUDIOS` in `app.py`:** Parallel list of `(store_id, name, region)` tuples carrying the region data. `SEED_STORES` doesn't hold region because the DB schema migration must add the `region` column before this data can be inserted.
+
+**`VALID_REGIONS` in `app.py`:** Python set of the five valid region strings used for server-side validation:
+- `NY & East Coast Metro`
+- `North Pacific`
+- `Southeast`
+- `South Central`
+- `Northeast & Central`
+
+**`migrate_to_real_studios(conn)` in `app.py`:** Called from `init_store_db()` on every app startup after all schema migrations have run.
+- Detects dummy data by checking `SELECT 1 FROM stores WHERE name = '001 NY SoHo'`
+- If found: `DELETE FROM stores`, then reinserts all 41 real studios from `REAL_STUDIOS` with fresh bcrypt-hashed credentials (`username = password = store_id`)
+- Idempotent: if the canary row is absent (real data already in place), returns immediately
+- Must run after the `region` column migration so the INSERT can include region values
+
+**Files touched:** `app.py`
+
+---
+
+#### Region Column — Schema Migration
+
+**What was built:** A new `region TEXT DEFAULT ''` column on the `stores` table.
+
+**Migration:** Added to `init_store_db()` following the exact existing pattern used for `manager` and `phone`:
+```python
+if 'region' not in existing:
+    conn.execute("ALTER TABLE stores ADD COLUMN region TEXT DEFAULT ''")
+```
+Runs before `migrate_to_real_studios()` so region values can be written during the data migration.
+
+**Files touched:** `app.py`
+
+---
+
+#### HQ Studios Page Table — Column Changes
+
+**What was built:** The main studios table display was updated. The Studio Profile Panel edit form was **not** modified.
+
+**Columns removed from table display only:** Manager, Email, Phone. These three fields remain in the `stores` table schema and remain editable in the Studio Profile Panel via `enterEditMode` → `POST /hq/studios/update-store`. No change to that flow.
+
+**Column added:** Region (`store.region`, right after Studio). Shows `—` if empty.
+
+**Final column order:** Count (status dot) | Studio | Region
+
+**Sortable columns:** Studio (col index 1), Region (col index 2). Uses the `sortable_th` macro, matching existing table conventions.
+
+**Files touched:** `templates/fragments/studios.html`
+
+---
+
+#### Add Studio Modal + Route
+
+**What was built:** A `+ Add Studio` button on the HQ studios page that opens a form modal for creating a new studio entry.
+
+**Button placement:** Flex row alongside the search input, right-aligned (`flex-shrink: 0`).
+
+**Modal fields:**
+
+| Field | Input | Validation |
+|---|---|---|
+| Studio Number | Text, maxlength 4 | Required; `/^[0-9]{1,4}$/` — digits only, leading zeros preserved (`"046"` stores as `"046"`) |
+| Studio Name | Text, maxlength 100 | Required; max 100 chars |
+| Region | Select (5 options) | Required; must match one of the 5 `VALID_REGIONS` strings exactly |
+
+**Client-side validation:** Fires on submit; inline error messages appear below each offending field; modal stays open on failure.
+
+**Server errors** (including duplicate `store_id`) returned as `{"ok": false, "error": "..."}` HTTP 400, displayed inline in the modal without closing it.
+
+**Success flow:**
+1. Modal closes
+2. `sessionStorage.setItem('studioAdded', store_id)` saves the message across the reload
+3. `window.location.href = '/hq/?section=studios'` — full page reload (refreshes `storeDataGlobal` in `hq_shell.html`)
+4. On load, the fragment's inline `<script>` reads sessionStorage, shows a lime toast for 4 seconds, clears the key
+
+**Route: `POST /hq/studios/add`** (new)
+
+Server validates: `store_id` non-empty and `/^[0-9]{1,4}$/`; `name` non-empty and ≤ 100 chars; `region` in `VALID_REGIONS`; `store_id` not already in `stores` table.
+
+On success, INSERTs:
+
+| Column | Value |
+|---|---|
+| `store_id` | submitted (as-is, leading zeros preserved) |
+| `name` | submitted (trimmed) |
+| `timezone` | `'America/New_York'` |
+| `username` | `store_id` |
+| `password_hash` | `bcrypt.hashpw(store_id.encode(), bcrypt.gensalt())` |
+| `email`, `manager`, `phone` | `''` (empty defaults) |
+| `region` | submitted |
+
+Returns `{"ok": true, "store_id": "..."}` on success.
+
+**New helper `get_store_by_id_db(store_id)`:** Looks up a store by primary key; returns dict or None.
+
+**Studio login for new studios:** The existing `POST /studio/login` route uses `get_store_by_username(username)` then bcrypt-checks the password. Since `username = store_id` and `password_hash = bcrypt(store_id)`, a newly added studio can immediately log in with their store number as both username and password — no separate credential setup step required.
+
+**Files touched:** `app.py`, `templates/fragments/studios.html`
