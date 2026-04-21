@@ -52,7 +52,7 @@ os.makedirs(IMAGES_DIR, exist_ok=True)
 # Flip SHOW_START_STOCK_CHECK to True to restore the "Start Your Stock Check"
 # button on the studio homepage. The flow itself (/studio/stock-check/*) is
 # unaffected by this flag — only the homepage button is hidden when False.
-SHOW_START_STOCK_CHECK = False
+SHOW_START_STOCK_CHECK = True
 
 # --- Default email template ---
 DEFAULT_EMAIL_BODY = (
