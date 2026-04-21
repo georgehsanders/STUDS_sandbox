@@ -1,7 +1,759 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- =========================================================================
+     HQ Analytics — Phase 2b
+     Sub-nav (.hq-analytics-subnav) is hoisted into the sticky header by
+     loadSection() in hq_shell.html. Everything below it stays in #hq-content.
+     ========================================================================= -->
+
 <div class="hq-analytics-subnav">
-    <!-- Phase 2b will populate real sub-tabs here -->
+    <div style="display:flex;align-items:center;width:100%;">
+        <div style="flex:1;"></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <a href="javascript:void(0)" id="atab-btn-overview"
+               class="hq-analytics-navlink"
+               onclick="_aTabSwitch('overview')">OVERVIEW</a>
+            <span class="hq-pipe">|</span>
+            <a href="javascript:void(0)" id="atab-btn-participation"
+               class="hq-analytics-navlink"
+               onclick="_aTabSwitch('participation')">PARTICIPATION</a>
+            <span class="hq-pipe">|</span>
+            <a href="javascript:void(0)" id="atab-btn-leaderboard"
+               class="hq-analytics-navlink"
+               onclick="_aTabSwitch('leaderboard')">LEADERBOARD</a>
+        </div>
+        <div style="flex:1;display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+            <span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#999;">RANGE</span>
+            <select id="analytics-range" class="hq-select"
+                    onchange="_aRangeChange()" style="margin-left:0;">
+                <option value="4w">Last 4 weeks</option>
+                <option value="12w">Last 12 weeks</option>
+                <option value="all">All time</option>
+            </select>
+        </div>
+    </div>
 </div>
-<div style="padding: 40px; text-align: center; color: #666;">
-    <p>HQ Analytics is being rebuilt.</p>
-    <p style="font-size: 0.9em;">Backend data is ready at <code>/hq/analytics/overview</code>, <code>/participation</code>, <code>/leaderboard</code>. New UI coming in Phase 2b.</p>
-</div>
+
+<div id="analytics-content" style="min-height:200px;"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    /* -------------------------------------------------------------------------
+       STATE
+    ------------------------------------------------------------------------- */
+    var _tab   = 'overview';
+    var _range = '4w';
+    var _cache = {};              // "tab:range" → data
+    var _charts = {};             // canvasId → Chart instance
+
+    var _expandedStoreId = null;
+    var _expandedTrEl    = null;
+
+    var _partData     = null;
+    var _partSortCol  = null;
+    var _partSortAsc  = true;
+
+    var _lbData       = null;
+    var _lbSortCol    = 'rank';
+    var _lbSortAsc    = true;
+
+    var EMPTY_MSG = 'No stock check data yet \u2014 analytics will populate as studios complete Begin Count runs.';
+
+    /* -------------------------------------------------------------------------
+       PUBLIC INTERFACE  (referenced by onclick= attributes)
+    ------------------------------------------------------------------------- */
+
+    window._aTabSwitch = function (tab) {
+        _tab = tab;
+        _updateTabIndicators();
+        var key = tab + ':' + _range;
+        if (_cache[key]) {
+            _renderTab(tab, _cache[key]);
+        } else {
+            _showLoading();
+            _doFetch(tab, function (data) {
+                _cache[key] = data;
+                _renderTab(tab, data);
+            });
+        }
+    };
+
+    window._aRangeChange = function () {
+        var sel = document.getElementById('analytics-range');
+        if (sel) _range = sel.value;
+        _cache = {};
+        _expandedStoreId = null;
+        _expandedTrEl    = null;
+        window._aTabSwitch(_tab);
+    };
+
+    window._aToggleDrill = function (storeId, trEl) {
+        if (_expandedStoreId === storeId) { _collapseDrill(); return; }
+        if (_expandedStoreId) _collapseDrill();
+        _expandDrill(storeId, trEl);
+    };
+
+    window._aPartSort = function (col) {
+        if (!_partData) return;
+        var asc = (_partSortCol === col) ? !_partSortAsc : true;
+        _partSortCol = col;
+        _partSortAsc = asc;
+        var rows = _sortPart(_partData.slice(), col, asc);
+        _updateSortIndicators('psort', ['studio','region','this_week','runs'], col, asc);
+        var tbody = document.getElementById('participation-tbody');
+        if (tbody) tbody.innerHTML = _partRowsHtml(rows);
+    };
+
+    window._aLbSort = function (col) {
+        if (!_lbData) return;
+        if (_expandedStoreId) _collapseDrill();
+        var defaultAsc = (col === 'rank' || col === 'studio' || col === 'region');
+        var asc = (_lbSortCol === col) ? !_lbSortAsc : defaultAsc;
+        _lbSortCol = col;
+        _lbSortAsc = asc;
+        var rows = _sortLb(_lbData.slice(), col, asc);
+        _updateSortIndicators('lbsort', ['rank','studio','region','score','completion','follow','adjustment'], col, asc);
+        var tbody = document.getElementById('leaderboard-tbody');
+        if (tbody) tbody.innerHTML = _lbRowsHtml(rows);
+    };
+
+    /* -------------------------------------------------------------------------
+       HELPERS — DOM
+    ------------------------------------------------------------------------- */
+
+    function _content() { return document.getElementById('analytics-content'); }
+
+    function _showLoading() {
+        var el = _content();
+        if (el) el.innerHTML = '<div style="padding:60px;text-align:center;color:#999;font-size:13px;">Loading\u2026</div>';
+    }
+
+    function _showError(tab) {
+        var el = _content();
+        if (!el) return;
+        el.innerHTML = '<div style="padding:60px;text-align:center;color:#999;font-size:13px;">'
+            + 'Couldn\u2019t load analytics. '
+            + '<a href="javascript:void(0)" onclick="_aTabSwitch(\'' + tab + '\')" style="color:#1a1a1a;">Retry?</a>'
+            + '</div>';
+    }
+
+    function _updateTabIndicators() {
+        ['overview', 'participation', 'leaderboard'].forEach(function (t) {
+            var el = document.getElementById('atab-btn-' + t);
+            if (el) el.style.textDecoration = (t === _tab) ? 'underline' : 'none';
+        });
+    }
+
+    function _updateSortIndicators(prefix, cols, activeCol, asc) {
+        cols.forEach(function (c) {
+            var el = document.getElementById(prefix + '-' + c);
+            if (el) el.textContent = (c === activeCol) ? (asc ? ' \u2191' : ' \u2193') : '';
+        });
+    }
+
+    /* -------------------------------------------------------------------------
+       HELPERS — Formatting
+    ------------------------------------------------------------------------- */
+
+    function _fmtDuration(secs) {
+        if (secs === null || secs === undefined) return '\u2014';
+        secs = parseInt(secs, 10);
+        if (isNaN(secs) || secs < 0) return '\u2014';
+        if (secs < 60)   return '<1m';
+        if (secs < 3600) return Math.floor(secs / 60) + 'm';
+        return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+    }
+
+    function _fmtDate(iso) {
+        if (!iso) return '\u2014';
+        try {
+            return new Date(iso).toLocaleString('en-US', {
+                month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit', hour12: true
+            });
+        } catch (e) { return iso; }
+    }
+
+    function _esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function _pct(p) { return Math.round((p || 0) * 100) + '%'; }
+
+    /* -------------------------------------------------------------------------
+       HELPERS — Badges & dots
+    ------------------------------------------------------------------------- */
+
+    function _statusBadge(s) {
+        if (s === 'completed')
+            return '<span class="hq-badge hq-badge-updated">\u2713 Completed</span>';
+        if (s === 'abandoned')
+            return '<span class="hq-badge" style="background:#fef3c7;color:#92400e;">\u26a0 Abandoned</span>';
+        if (s === 'in_progress')
+            return '<span class="hq-badge hq-badge-incomplete">\u23f3 In Progress</span>';
+        return '<span class="hq-badge hq-badge-incomplete">\u2715 Didn\'t Start</span>';
+    }
+
+    function _dotColor(s) {
+        if (s === 'completed')   return '#4a9e5c';
+        if (s === 'abandoned')   return '#c8a800';
+        if (s === 'in_progress') return '#c8a800';
+        return '#cccccc';
+    }
+
+    function _weekDots(statuses) {
+        var html = '<span style="display:inline-flex;gap:3px;vertical-align:middle;">';
+        (statuses || []).forEach(function (s) {
+            html += '<span style="display:inline-block;width:12px;height:12px;background:'
+                + _dotColor(s) + ';"></span>';
+        });
+        html += '</span>';
+        return html;
+    }
+
+    /* -------------------------------------------------------------------------
+       HELPERS — Charts
+    ------------------------------------------------------------------------- */
+
+    function _destroyChart(id) {
+        if (_charts[id]) {
+            try { _charts[id].destroy(); } catch (e) {}
+            delete _charts[id];
+        }
+    }
+
+    function _whenChart(fn) {
+        if (typeof Chart !== 'undefined') { fn(); return; }
+        var tries = 0;
+        var t = setInterval(function () {
+            tries++;
+            if (typeof Chart !== 'undefined') { clearInterval(t); fn(); }
+            else if (tries > 40) clearInterval(t);
+        }, 50);
+    }
+
+    /* -------------------------------------------------------------------------
+       FETCH
+    ------------------------------------------------------------------------- */
+
+    function _doFetch(tab, cb) {
+        fetch('/hq/analytics/' + tab + '?range=' + _range)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(cb)
+            .catch(function () { _showError(tab); });
+    }
+
+    function _renderTab(tab, data) {
+        if (tab === 'overview')      _renderOverview(data);
+        else if (tab === 'participation') _renderParticipation(data);
+        else if (tab === 'leaderboard')   _renderLeaderboard(data);
+    }
+
+    function _emptyHtml() {
+        return '<div style="padding:60px;text-align:center;color:#999;font-size:13px;">'
+            + _esc(EMPTY_MSG) + '</div>';
+    }
+
+    /* =========================================================================
+       OVERVIEW TAB
+    ========================================================================= */
+
+    function _renderOverview(data) {
+        var el = _content();
+        if (!el) return;
+
+        var tw    = data.this_week || {};
+        var stats = data.stats     || {};
+        var trend = data.trend     || [];
+
+        if (data.empty) { el.innerHTML = _emptyHtml(); return; }
+
+        var pct   = tw.pct_completed || 0;
+        var color = pct >= 0.80 ? '#2d6930' : (pct >= 0.60 ? '#8a6000' : '#9b1c1c');
+        var pctStr = Math.round(pct * 100) + '%';
+
+        var html = '';
+
+        /* Headline */
+        html += '<div style="text-align:center;padding:32px 28px 20px;">';
+        html += '<div style="font-size:52px;font-weight:500;color:' + color + ';line-height:1;">';
+        html += (tw.completed_count || 0);
+        html += '<span style="font-size:28px;font-weight:400;color:#999;"> of ' + (tw.total_studios || 0) + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:16px;color:' + color + ';margin-top:8px;letter-spacing:0.02em;">'
+            + 'studios completed their stock check this week (' + pctStr + ')'
+            + '</div>';
+        if (tw.week_identifier) {
+            html += '<div style="font-size:13px;color:#999;margin-top:6px;letter-spacing:0.04em;">'
+                + 'Week of ' + _esc(tw.week_identifier) + '</div>';
+        }
+        html += '</div>';
+
+        /* Stats row */
+        var avgTime = (stats.avg_completion_time_seconds != null)
+            ? _fmtDuration(stats.avg_completion_time_seconds) : '\u2014';
+        html += '<div class="hq-analytics-stats" style="margin:0 28px 24px;">';
+        html += _statBox('AVG COMPLETION TIME',      avgTime);
+        html += _statBox('VARIANCES FOUND',          stats.total_variances_found      || 0);
+        html += _statBox('VARIANCES RECONCILED',     stats.total_variances_reconciled || 0);
+        html += _statBox('VARIANCES STILL OFF',      stats.total_variances_still_off  || 0);
+        html += '</div>';
+
+        /* Trend chart */
+        html += '<div class="hq-analytics-panel" style="margin:0 28px 28px;">';
+        html += '<div class="hq-section-heading">Network-Wide Variance Trend</div>';
+        if (trend.length === 0) {
+            html += '<div style="padding:20px;text-align:center;color:#999;font-size:13px;">'
+                + 'Not enough data yet for a trend.</div>';
+        } else {
+            html += '<div style="position:relative;height:260px;">'
+                + '<canvas id="ov-trend-chart"></canvas></div>';
+        }
+        html += '</div>';
+
+        el.innerHTML = html;
+
+        if (trend.length > 0) {
+            _whenChart(function () {
+                _destroyChart('ov-trend-chart');
+                var ctx = document.getElementById('ov-trend-chart');
+                if (!ctx) return;
+                _charts['ov-trend-chart'] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: trend.map(function (t) { return t.week_identifier; }),
+                        datasets: [
+                            {
+                                label: 'Variances Found (avg per run)',
+                                data: trend.map(function (t) { return t.avg_variances_found; }),
+                                borderColor: '#333333',
+                                backgroundColor: 'rgba(51,51,51,0.07)',
+                                tension: 0.25, pointRadius: 4, borderWidth: 2
+                            },
+                            {
+                                label: 'Variances Still Off (avg per run)',
+                                data: trend.map(function (t) { return t.avg_variances_still_off; }),
+                                borderColor: '#dc2626',
+                                backgroundColor: 'rgba(220,38,38,0.07)',
+                                tension: 0.25, pointRadius: 4, borderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        animation: false, responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top', labels: {
+                            font: { family: '"Helvetica Neue",Helvetica,Arial,sans-serif', size: 11 }
+                        }}},
+                        scales: {
+                            x: { grid: { color: '#f0f0f0' } },
+                            y: { beginAtZero: true, grid: { color: '#f0f0f0' } }
+                        }
+                    }
+                });
+            });
+        }
+    }
+
+    function _statBox(label, val) {
+        return '<div class="hq-analytics-stat">'
+            + '<div class="hq-summary-label">' + label + '</div>'
+            + '<div class="hq-summary-value" style="font-size:28px;">' + val + '</div>'
+            + '</div>';
+    }
+
+    /* =========================================================================
+       PARTICIPATION TAB
+    ========================================================================= */
+
+    function _renderParticipation(data) {
+        var el = _content();
+        if (!el) return;
+
+        if (data.empty || !data.rows || !data.rows.length) {
+            el.innerHTML = _emptyHtml();
+            return;
+        }
+
+        /* Default sort: didnt_start → abandoned/in_progress → completed; then store_id asc */
+        var rows = _sortPart(data.rows.slice(), 'this_week', true);
+        _partData    = data.rows.slice();
+        _partSortCol = 'this_week';
+        _partSortAsc = true;
+
+        var html = '<div style="padding:24px 28px 0;">'
+            + '<div style="overflow-x:auto;">'
+            + '<table class="hq-table" id="participation-table"><thead><tr>';
+
+        var phdr = [
+            { id:'studio',   label:'STUDIO' },
+            { id:'region',   label:'REGION' },
+            { id:'this_week',label:'THIS WEEK',    center:true },
+            { id:null,       label:'LAST 4 WEEKS', center:true },
+            { id:'runs',     label:'RUNS IN RANGE',right:true }
+        ];
+        phdr.forEach(function (h) {
+            var style = h.center ? 'text-align:center;' : (h.right ? 'text-align:right;' : '');
+            if (h.id) {
+                html += '<th class="sortable-col" style="' + style + 'cursor:pointer;"'
+                    + ' onclick="_aPartSort(\'' + h.id + '\')">'
+                    + h.label + ' <span class="sort-indicator" id="psort-' + h.id + '"></span></th>';
+            } else {
+                html += '<th style="' + style + '">' + h.label + '</th>';
+            }
+        });
+        html += '</tr></thead>';
+        html += '<tbody id="participation-tbody">' + _partRowsHtml(rows) + '</tbody>';
+        html += '</table></div></div>';
+
+        el.innerHTML = html;
+        _updateSortIndicators('psort', ['studio','region','this_week','runs'], 'this_week', true);
+    }
+
+    function _sortPart(rows, col, asc) {
+        var order = { didnt_start: 0, abandoned: 1, in_progress: 2, completed: 3 };
+        rows.sort(function (a, b) {
+            var av, bv;
+            if (col === 'studio')     { av = a.store_id; bv = b.store_id; }
+            else if (col === 'region')     { av = (a.region || '').toLowerCase(); bv = (b.region || '').toLowerCase(); }
+            else if (col === 'this_week') {
+                av = order[a.this_week_status] !== undefined ? order[a.this_week_status] : 4;
+                bv = order[b.this_week_status] !== undefined ? order[b.this_week_status] : 4;
+            }
+            else if (col === 'runs') { av = a.runs_in_range || 0; bv = b.runs_in_range || 0; }
+            else { av = a.store_id; bv = b.store_id; }
+            if (av < bv) return asc ? -1 : 1;
+            if (av > bv) return asc ? 1 : -1;
+            /* secondary: store_id asc */
+            return a.store_id < b.store_id ? -1 : 1;
+        });
+        return rows;
+    }
+
+    function _partRowsHtml(rows) {
+        return rows.map(function (r) {
+            var l4 = r.last_4_weeks_status || ['didnt_start','didnt_start','didnt_start','didnt_start'];
+            return '<tr>'
+                + '<td>' + _esc(r.name) + '</td>'
+                + '<td>' + _esc(r.region || '\u2014') + '</td>'
+                + '<td style="text-align:center;">' + _statusBadge(r.this_week_status) + '</td>'
+                + '<td style="text-align:center;">' + _weekDots(l4) + '</td>'
+                + '<td style="text-align:right;">' + (r.runs_in_range || 0) + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    /* =========================================================================
+       LEADERBOARD TAB
+    ========================================================================= */
+
+    function _renderLeaderboard(data) {
+        var el = _content();
+        if (!el) return;
+
+        if (data.empty || !data.rows || !data.rows.length) {
+            el.innerHTML = _emptyHtml();
+            return;
+        }
+
+        var rows = data.rows.slice();
+        _lbData    = rows;
+        _lbSortCol = 'rank';
+        _lbSortAsc = true;
+
+        var html = '<div style="padding:24px 28px 0;">'
+            + '<div style="overflow-x:auto;">'
+            + '<table class="hq-table" id="leaderboard-table"><thead><tr>';
+
+        var lhdr = [
+            { id:'rank',       label:'RANK',        w:'50px' },
+            { id:'studio',     label:'STUDIO' },
+            { id:'region',     label:'REGION' },
+            { id:'score',      label:'SCORE',       right:true },
+            { id:'completion', label:'COMPLETION',   right:true },
+            { id:'follow',     label:'FOLLOW-THROUGH', right:true },
+            { id:'adjustment', label:'ADJ. SUCCESS', right:true }
+        ];
+        lhdr.forEach(function (h) {
+            var style = (h.right ? 'text-align:right;' : '') + (h.w ? 'width:' + h.w + ';' : '');
+            html += '<th class="sortable-col" style="' + style + 'cursor:pointer;"'
+                + ' onclick="_aLbSort(\'' + h.id + '\')">'
+                + h.label + ' <span class="sort-indicator" id="lbsort-' + h.id + '"></span></th>';
+        });
+        html += '</tr></thead>';
+        html += '<tbody id="leaderboard-tbody">' + _lbRowsHtml(rows) + '</tbody>';
+        html += '</table></div></div>';
+
+        el.innerHTML = html;
+        _updateSortIndicators('lbsort',
+            ['rank','studio','region','score','completion','follow','adjustment'], 'rank', true);
+    }
+
+    function _sortLb(rows, col, asc) {
+        rows.sort(function (a, b) {
+            var av, bv;
+            var cr_a = a.completion_rate || {}, cr_b = b.completion_rate || {};
+            var ft_a = a.follow_through_rate || {}, ft_b = b.follow_through_rate || {};
+            var as_a = a.adjustment_success_rate || {}, as_b = b.adjustment_success_rate || {};
+            if      (col === 'rank')       { av = a.rank;          bv = b.rank; }
+            else if (col === 'studio')     { av = a.store_id;      bv = b.store_id; }
+            else if (col === 'region')     { av = (a.region||'').toLowerCase(); bv = (b.region||'').toLowerCase(); }
+            else if (col === 'score')      { av = a.score;         bv = b.score; }
+            else if (col === 'completion') { av = cr_a.pct || 0;   bv = cr_b.pct || 0; }
+            else if (col === 'follow')     { av = ft_a.pct || 0;   bv = ft_b.pct || 0; }
+            else if (col === 'adjustment') { av = as_a.pct || 0;   bv = as_b.pct || 0; }
+            else                           { av = a.rank;          bv = b.rank; }
+            if (av < bv) return asc ? -1 : 1;
+            if (av > bv) return asc ? 1 : -1;
+            return a.store_id < b.store_id ? -1 : 1;
+        });
+        return rows;
+    }
+
+    function _lbRowsHtml(rows) {
+        return rows.map(function (r) {
+            var cr  = r.completion_rate          || {};
+            var ftr = r.follow_through_rate      || {};
+            var asr = r.adjustment_success_rate  || {};
+            var sid = _esc(r.store_id);
+            return '<tr class="hq-store-row" data-store-id="' + sid + '"'
+                + ' onclick="_aToggleDrill(\'' + sid + '\', this)"'
+                + ' style="cursor:pointer;">'
+                + '<td>' + r.rank + '</td>'
+                + '<td>' + _esc(r.name) + '</td>'
+                + '<td>' + _esc(r.region || '\u2014') + '</td>'
+                + '<td style="text-align:right;">' + r.score + '</td>'
+                + '<td style="text-align:right;">' + (cr.completed || 0) + '/' + (cr.total_weeks || 0) + ' weeks</td>'
+                + '<td style="text-align:right;">' + _pct(ftr.pct)
+                    + '<br><span style="font-size:11px;color:#999;">('
+                    + (ftr.completed || 0) + ' of ' + (ftr.started || 0) + ' completed)</span></td>'
+                + '<td style="text-align:right;">' + _pct(asr.pct)
+                    + '<br><span style="font-size:11px;color:#999;">('
+                    + (asr.reconciled || 0) + ' of ' + (asr.total_variances || 0) + ' reconciled)</span></td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    /* =========================================================================
+       DRILL-DOWN
+    ========================================================================= */
+
+    function _expandDrill(storeId, trEl) {
+        _expandedStoreId = storeId;
+        _expandedTrEl    = trEl;
+
+        /* Insert placeholder row */
+        var drillRow = document.createElement('tr');
+        drillRow.id = 'drill-' + storeId;
+        drillRow.className = 'hq-detail-row';
+        var td = document.createElement('td');
+        td.colSpan = 7;
+        td.style.padding = '0';
+        td.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:13px;">'
+            + 'Loading studio details\u2026</div>';
+        drillRow.appendChild(td);
+        trEl.parentNode.insertBefore(drillRow, trEl.nextSibling);
+
+        fetch('/hq/analytics/studio/' + storeId + '?range=' + _range)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                var row = document.getElementById('drill-' + storeId);
+                if (!row) return;
+                var cell = row.querySelector('td');
+                if (cell) {
+                    cell.innerHTML = _drillHtml(storeId, data);
+                    _renderDrillCharts(storeId, data);
+                }
+            })
+            .catch(function () {
+                var row = document.getElementById('drill-' + storeId);
+                if (row) {
+                    var cell = row.querySelector('td');
+                    if (cell) cell.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px;">'
+                        + 'Couldn\u2019t load studio details. '
+                        + '<a href="javascript:void(0)" style="color:#1a1a1a;"'
+                        + ' onclick="_aToggleDrill(\'' + _esc(storeId) + '\', document.querySelector(\'tr[data-store-id=\\\"'
+                        + _esc(storeId) + '\\\"]\'))">Retry?</a></div>';
+                }
+            });
+    }
+
+    function _collapseDrill() {
+        if (!_expandedStoreId) return;
+        _destroyChart('drill-funnel-' + _expandedStoreId);
+        _destroyChart('drill-trend-'  + _expandedStoreId);
+        var row = document.getElementById('drill-' + _expandedStoreId);
+        if (row && row.parentNode) row.parentNode.removeChild(row);
+        _expandedStoreId = null;
+        _expandedTrEl    = null;
+    }
+
+    function _drillHtml(storeId, data) {
+        if (data.empty) {
+            return '<div style="padding:20px;text-align:center;color:#999;font-size:13px;">'
+                + 'No stock check data in this range for this studio.</div>';
+        }
+
+        var html = '<div style="padding:20px 24px;">';
+
+        /* --- FUNNEL --- */
+        var funnel = data.funnel || [];
+        html += '<div style="margin-bottom:24px;">';
+        html += '<div class="hq-subsection-heading">STEP FUNNEL</div>';
+        if (funnel.length) {
+            html += '<div style="position:relative;height:180px;"><canvas id="drill-funnel-' + storeId + '"></canvas></div>';
+            /* Biggest drop-off */
+            var biggestStep = -1, biggestDrop = 0;
+            for (var i = 0; i < funnel.length - 1; i++) {
+                var drop = funnel[i].count - funnel[i + 1].count;
+                if (drop > biggestDrop) { biggestDrop = drop; biggestStep = i; }
+            }
+            if (biggestStep >= 0 && biggestDrop > 0) {
+                html += '<p style="font-size:12px;color:#666;margin:8px 0 0;">'
+                    + 'Biggest drop-off: Step ' + (biggestStep + 1) + ' \u2192 Step ' + (biggestStep + 2)
+                    + ' (lost ' + biggestDrop + ' run' + (biggestDrop > 1 ? 's' : '') + ')</p>';
+            } else {
+                html += '<p style="font-size:12px;color:#666;margin:8px 0 0;">'
+                    + 'No drop-off \u2014 all runs that started reached Step 7.</p>';
+            }
+        } else {
+            html += '<div style="color:#999;font-size:13px;">No run data available.</div>';
+        }
+        html += '</div>';
+
+        /* --- VARIANCE TREND --- */
+        var vt = data.variance_trend || [];
+        html += '<div style="margin-bottom:24px;">';
+        html += '<div class="hq-subsection-heading">VARIANCE TREND</div>';
+        if (!vt.length) {
+            html += '<div style="color:#999;font-size:13px;">No completed runs yet in this range.</div>';
+        } else {
+            html += '<div style="position:relative;height:160px;"><canvas id="drill-trend-' + storeId + '"></canvas></div>';
+        }
+        html += '</div>';
+
+        /* --- RECENT RUNS --- */
+        var rr = data.recent_runs || [];
+        html += '<div>';
+        html += '<div class="hq-subsection-heading">RECENT RUNS</div>';
+        if (!rr.length) {
+            html += '<div style="color:#999;font-size:13px;">No recent runs in this range.</div>';
+        } else {
+            html += '<table class="hq-detail-table" style="width:100%;">';
+            html += '<thead><tr>'
+                + '<th>STARTED</th><th>COUNTER</th><th>STATUS</th>'
+                + '<th>DURATION</th><th>FOUND</th><th>RECONCILED</th>'
+                + '</tr></thead><tbody>';
+            rr.forEach(function (run) {
+                html += '<tr>'
+                    + '<td style="white-space:nowrap;">' + _fmtDate(run.started_at) + '</td>'
+                    + '<td>' + _esc(run.counter_name || '\u2014') + '</td>'
+                    + '<td>' + _statusBadge(run.status) + '</td>'
+                    + '<td>' + _esc(run.duration_formatted || '\u2014') + '</td>'
+                    + '<td>' + (run.total_variances    != null ? run.total_variances    : '\u2014') + '</td>'
+                    + '<td>' + (run.variances_reconciled != null ? run.variances_reconciled : '\u2014') + '</td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table>';
+        }
+        html += '</div>';
+
+        html += '</div>';
+        return html;
+    }
+
+    function _renderDrillCharts(storeId, data) {
+        var funnel = data.funnel        || [];
+        var vt     = data.variance_trend || [];
+
+        _whenChart(function () {
+            /* Funnel */
+            if (funnel.length) {
+                var fCtx = document.getElementById('drill-funnel-' + storeId);
+                if (fCtx) {
+                    _destroyChart('drill-funnel-' + storeId);
+                    _charts['drill-funnel-' + storeId] = new Chart(fCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: funnel.map(function (f) { return 'Step ' + f.step; }),
+                            datasets: [{
+                                data: funnel.map(function (f) { return f.count; }),
+                                backgroundColor: '#555555',
+                                borderColor: '#333333',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            animation: false, responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f0f0f0' } },
+                                x: { grid: { display: false } }
+                            }
+                        }
+                    });
+                }
+            }
+
+            /* Variance trend */
+            if (vt.length) {
+                var tCtx = document.getElementById('drill-trend-' + storeId);
+                if (tCtx) {
+                    _destroyChart('drill-trend-' + storeId);
+                    _charts['drill-trend-' + storeId] = new Chart(tCtx, {
+                        type: 'line',
+                        data: {
+                            labels: vt.map(function (t) { return t.week_identifier; }),
+                            datasets: [
+                                {
+                                    label: 'Variances Found',
+                                    data: vt.map(function (t) { return t.variances_found; }),
+                                    borderColor: '#333333',
+                                    backgroundColor: 'rgba(51,51,51,0.07)',
+                                    tension: 0.25, pointRadius: 4, borderWidth: 2
+                                },
+                                {
+                                    label: 'Variances Still Off',
+                                    data: vt.map(function (t) { return t.variances_still_off; }),
+                                    borderColor: '#dc2626',
+                                    backgroundColor: 'rgba(220,38,38,0.07)',
+                                    tension: 0.25, pointRadius: 4, borderWidth: 2
+                                }
+                            ]
+                        },
+                        options: {
+                            animation: false, responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { position: 'top', labels: {
+                                font: { family: '"Helvetica Neue",Helvetica,Arial,sans-serif', size: 11 }
+                            }}},
+                            scales: {
+                                y: { beginAtZero: true, grid: { color: '#f0f0f0' } },
+                                x: { grid: { display: false } }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    /* =========================================================================
+       INIT
+    ========================================================================= */
+
+    window._aTabSwitch('overview');
+
+})();
+</script>
