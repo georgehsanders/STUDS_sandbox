@@ -289,6 +289,20 @@
         .step7-summary-value-green { font-weight: 600; color: #2d6930; text-align: right; }
         .step7-summary-value-red   { font-weight: 600; color: #c23030; text-align: right; }
 
+        /* ---- Intro: counter name field ---- */
+        #intro-counter-name {
+            width: 100%;
+            max-width: 360px;
+            padding: 10px 12px;
+            border: 1.5px solid #e0e0e0;
+            font-size: 14px;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1a1a1a;
+            background: #fff;
+            border-radius: 0;
+        }
+        #intro-counter-name:focus { border-color: #000; outline: none; }
+
         /* ---- Step indicator ---- */
         #step-indicator {
             padding: 14px 32px 0 32px;
@@ -405,13 +419,18 @@
         <div class="studio-tutorial-step studio-tutorial-active" id="step-intro">
             <h2 class="studio-tutorial-heading">Hey, Stud!</h2>
             <p class="studio-tutorial-body">Click the button below to begin your Weekly Stock Check. Before you begin, please confirm that the items below are complete.</p>
+            <div style="margin:0 0 24px 0;">
+                <label for="intro-counter-name" style="display:block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:8px;">Your name</label>
+                <input type="text" id="intro-counter-name" maxlength="100" placeholder="Enter your name" oninput="onCounterNameInput()">
+                <div id="intro-name-error" style="display:none;margin-top:6px;font-size:12px;color:#c23030;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;"></div>
+            </div>
             <ul class="studio-tutorial-checklist">
                 <li><input type="checkbox"><span>You are using the studio laptop, not your personal or the Studio Manager laptop.</span></li>
                 <li><input type="checkbox"><span>All unprocessed damages are adjusted with the correct reason code in Brightpearl.</span></li>
                 <li><input type="checkbox"><span>Assigned SKUs for the week are organized and in their correct bins.</span></li>
                 <li><input type="checkbox"><span>No jewelry is sitting in your DCR, Midmarks, or in the Reprocessing Bins.</span></li>
             </ul>
-            <button class="studio-tutorial-btn" onclick="goToStep('step-1')">I'm ready to begin the Stock Check Process.</button>
+            <button class="studio-tutorial-btn" id="intro-begin-btn" onclick="beginStockCheck()" disabled style="opacity:0.4;cursor:not-allowed;">I'm ready to begin the Stock Check Process.</button>
         </div>
 
         <!-- STEP 1 -->
@@ -597,6 +616,10 @@
                 <!-- Section 3 (cont.): Screenshot-able summary -->
                 <div class="step7-summary" id="step7-summary-block">
                     <div class="step7-summary-title">Stock Check Summary</div>
+                    <div class="step7-summary-row" id="s7-row-name" style="display:none;">
+                        <span class="step7-summary-label">Completed by</span>
+                        <span class="step7-summary-value" id="s7-counter-name">—</span>
+                    </div>
                     <div class="step7-summary-row">
                         <span class="step7-summary-label">Total SKUs checked</span>
                         <span class="step7-summary-value" id="s7-total">—</span>
@@ -653,6 +676,7 @@
         var crosscheckRowsSvr   = {{ crosscheck_rows | tojson }};
         var summarySvr          = {{ summary | tojson }};
         var stepStatusFromSvr   = {{ step_status | tojson }};
+        var counterNameFromSvr  = {{ counter_name | tojson }};
 
         // Client-side step tracking (mutable, updated by goToStep)
         var currentClientStep = currentStepFromServer;
@@ -960,6 +984,59 @@
                 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
+        // ---- Intro: counter name field and gated advance ----
+
+        function onCounterNameInput() {
+            var val = document.getElementById('intro-counter-name').value.trim();
+            var btn = document.getElementById('intro-begin-btn');
+            if (!btn) return;
+            if (val.length > 0) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            } else {
+                btn.disabled = true;
+                btn.style.opacity = '0.4';
+                btn.style.cursor = 'not-allowed';
+            }
+        }
+
+        function beginStockCheck() {
+            var name = document.getElementById('intro-counter-name').value.trim();
+            if (!name) return;
+
+            var errEl = document.getElementById('intro-name-error');
+            if (errEl) errEl.style.display = 'none';
+
+            var btn = document.getElementById('intro-begin-btn');
+            if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; }
+
+            fetch('/studio/tutorial/counter-name', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name}),
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    goToStep('step-1');
+                } else {
+                    if (errEl) {
+                        errEl.textContent = data.error || "Couldn\u2019t save your name \u2014 please try again.";
+                        errEl.style.display = '';
+                    }
+                    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+                }
+            })
+            .catch(function() {
+                if (errEl) {
+                    errEl.textContent = "Couldn\u2019t save your name \u2014 please try again.";
+                    errEl.style.display = '';
+                }
+                if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+            });
+        }
+
         // ---- Step indicator ----
 
         function updateStepIndicator(stepNum) {
@@ -1089,6 +1166,10 @@
             el = document.getElementById('s7-total');      if (el) el.textContent = s.total_skus;
             el = document.getElementById('s7-reconciled'); if (el) el.textContent = s.reconciled;
             el = document.getElementById('s7-still-off');  if (el) el.textContent = s.still_off;
+            if (s.counter_name) {
+                el = document.getElementById('s7-counter-name'); if (el) el.textContent = s.counter_name;
+                el = document.getElementById('s7-row-name');     if (el) el.style.display = '';
+            }
 
             // Adapt banner copy and style based on whether any variances remain
             var banner = document.getElementById('step7-banner');
@@ -1123,6 +1204,15 @@
         // ---- Page load ----
 
         document.addEventListener('DOMContentLoaded', function() {
+
+            // Pre-fill counter name from session (resume case)
+            if (counterNameFromSvr) {
+                var nameEl = document.getElementById('intro-counter-name');
+                if (nameEl) {
+                    nameEl.value = counterNameFromSvr;
+                    onCounterNameInput();  // re-evaluate button gate
+                }
+            }
 
             // Restore step from session and initialize indicator
             if (currentStepFromServer > 0) {

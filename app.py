@@ -629,6 +629,7 @@ def studio_tutorial():
             'oc_filename': session.get('begin_count_oc_filename', ''),
             'bp_verify_filename': bp_verify_filename,
             'completed_at': '',  # not recorded on resume
+            'counter_name': session.get('begin_count_counter_name', ''),
         }
 
     # Step indicator: compute completion state per step (1–7)
@@ -669,7 +670,8 @@ def studio_tutorial():
                            bp_verify_matched_rows=bp_verify_matched_rows,
                            crosscheck_rows=crosscheck_rows,
                            summary=summary,
-                           step_status=step_status)
+                           step_status=step_status,
+                           counter_name=session.get('begin_count_counter_name', ''))
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])
@@ -998,6 +1000,7 @@ def studio_tutorial_upload_bp_verify():
             'oc_filename': session.get('begin_count_oc_filename', ''),
             'bp_verify_filename': filename,
             'completed_at': completed_at,
+            'counter_name': session.get('begin_count_counter_name', ''),
         }
 
         return jsonify({
@@ -1027,9 +1030,29 @@ def studio_tutorial_reset():
         'begin_count_step3_done',
         'begin_count_step5_done',
         'begin_count_step6_done',
+        'begin_count_counter_name',
     ]
     for key in _keys:
         session.pop(key, None)
+    return jsonify({'ok': True})
+
+
+@app.route('/studio/tutorial/counter-name', methods=['POST'])
+@studio_login_required
+def studio_tutorial_counter_name():
+    """Store the counter's name in the session for the Begin Count flow."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data'}), 400
+    name = data.get('name', '')
+    if not isinstance(name, str):
+        return jsonify({'ok': False, 'error': 'Name must be a string'}), 400
+    name = name.strip()
+    if len(name) < 1:
+        return jsonify({'ok': False, 'error': 'Name cannot be empty'}), 400
+    if len(name) > 100:
+        return jsonify({'ok': False, 'error': 'Name must be 100 characters or fewer'}), 400
+    session['begin_count_counter_name'] = name
     return jsonify({'ok': True})
 
 
