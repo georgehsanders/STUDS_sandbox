@@ -103,6 +103,17 @@ SEED_STORES = [
 ]
 
 
+# --- Studio QR code values for Begin Count wizard ---
+# Pilot scope: Studio 002 Hudson Yards only.
+# To add more studios, add their store_id and OmniCounts registration URL/value here.
+STUDIO_QR_CODES = {
+    '002': 'https://app.omnicounts.com/studio/002',  # TODO: replace with real OmniCounts URL for studio 002
+}
+STUDIO_QR_LABELS = {
+    '002': 'Studio 002 \u2014 Hudson Yards',
+}
+
+
 def get_db():
     """Get a SQLite connection to the store profiles database."""
     conn = sqlite3.connect(STORE_DB)
@@ -536,7 +547,17 @@ def studio_index():
 @studio_login_required
 def studio_tutorial():
     current_step = session.get('begin_count_step', 0)
-    return render_template('studio_tutorial.html', current_step=current_step)
+    store_id = session.get('store_id', '')
+    qr_value = STUDIO_QR_CODES.get(store_id, '')
+    qr_label = STUDIO_QR_LABELS.get(store_id, '')
+    bp_upload_done = 'begin_count_bp_onhand' in session
+    bp_filename = session.get('begin_count_bp_filename', '')
+    return render_template('studio_tutorial.html',
+                           current_step=current_step,
+                           qr_value=qr_value,
+                           qr_label=qr_label,
+                           bp_upload_done=bp_upload_done,
+                           bp_filename=bp_filename)
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])
@@ -552,6 +573,58 @@ def studio_tutorial_step():
         return jsonify({'ok': False, 'error': 'step must be an integer 0–7'}), 400
     session['begin_count_step'] = step
     return jsonify({'ok': True})
+
+
+@app.route('/studio/tutorial/upload-bp', methods=['POST'])
+@studio_login_required
+def studio_tutorial_upload_bp():
+    """Accept a Brightpearl Inventory Summary CSV for the Begin Count wizard (Step 1).
+    Parsed on-hand quantities are stored in session['begin_count_bp_onhand'].
+    Kept separate from session['bp_onhand'] used by the Start Your Stock Check flow."""
+    f = request.files.get('bp_file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+    try:
+        filename = f.filename
+        raw_bytes = f.read()
+        text = clean_csv_content(raw_bytes)
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            return jsonify({'ok': False, 'error': 'Could not read file headers'}), 400
+        headers = [h.strip().lower() for h in reader.fieldnames]
+        reader.fieldnames = headers
+        sku_col = None
+        qty_col = None
+        for h in headers:
+            if h == 'sku' and sku_col is None:
+                sku_col = h
+        for h in headers:
+            if ('on hand' in h or 'onhand' in h or 'on-hand' in h) and qty_col is None:
+                qty_col = h
+        if qty_col is None:
+            for h in headers:
+                if 'quantity' in h and qty_col is None:
+                    qty_col = h
+        if sku_col is None:
+            return jsonify({'ok': False, 'error': 'No SKU column found in uploaded file'}), 400
+        if qty_col is None:
+            return jsonify({'ok': False, 'error': 'No on-hand quantity column found. Expected a column containing "on hand" or "quantity".'}), 400
+        bp_data = {}
+        for row in reader:
+            sku = (row.get(sku_col) or '').strip().upper()
+            qty_str = (row.get(qty_col) or '').strip()
+            if not sku or is_excluded_sku(sku):
+                continue
+            try:
+                qty = int(float(qty_str))
+            except (ValueError, TypeError):
+                qty = 0
+            bp_data[sku] = qty
+        session['begin_count_bp_onhand'] = bp_data
+        session['begin_count_bp_filename'] = filename
+        return jsonify({'ok': True, 'sku_count': len(bp_data), 'filename': filename})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/studio/omnicounts', methods=['GET', 'POST'])

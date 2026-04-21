@@ -114,6 +114,7 @@
             margin-top: 20px;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body class="studio-body">
 
@@ -180,15 +181,25 @@
                 <li>Click "Export" to download your studio's inventory summary.</li>
             </ol>
             <p class="studio-tutorial-body">Once the file is downloaded, drop it into the upload box below.</p>
-            <!-- PHASE 2: Brightpearl Inventory Summary file upload control goes here -->
-            <button class="studio-tutorial-btn" onclick="goToStep('step-2')">I've done this — onto the next step!</button>
+            <div id="step1-upload-area" style="border:1.5px dashed #ccc;padding:24px;margin:0 0 20px 0;background:#fafafa;">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <input type="file" id="step1-bp-file" accept=".csv" style="font-size:13px;color:#1a1a1a;flex:1;min-width:0;">
+                    <button onclick="uploadBpFile()" id="step1-upload-btn" class="studio-tutorial-btn" style="margin-top:0;">Upload</button>
+                </div>
+                <div id="step1-upload-status" style="display:none;margin-top:12px;font-size:13px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;line-height:1.5;"></div>
+            </div>
+            <button class="studio-tutorial-btn" id="step1-advance-btn" onclick="goToStep('step-2')" disabled style="opacity:0.4;cursor:not-allowed;">I've done this — onto the next step!</button>
         </div>
 
         <!-- STEP 2 -->
         <div class="studio-tutorial-step" id="step-2">
             <h2 class="studio-tutorial-heading">Step 2: Log into OmniCounts and Scan Your Studio's QR Code</h2>
             <p class="studio-tutorial-body">Log into the OmniCounts Dashboard on your laptop. Then open the OmniCounts app on your mobile phone and scan the QR code below.</p>
-            <!-- PHASE 2: QR code image for studio 002 Hudson Yards goes here -->
+            <div style="margin:24px 0 28px 0;text-align:center;">
+                <div id="qr-code-container" style="display:inline-block;"></div>
+                <div id="qr-no-code" style="display:none;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#999;font-style:italic;padding:32px 0;">QR code not yet configured for your studio. Contact HQ.</div>
+                <div id="qr-label" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:500;letter-spacing:0.04em;color:#1a1a1a;margin-top:10px;"></div>
+            </div>
             <button class="studio-tutorial-btn" onclick="goToStep('step-3')">I've done this — onto the next step!</button>
         </div>
 
@@ -236,6 +247,10 @@
 
     <script>
         var currentStepFromServer = {{ current_step | tojson }};
+        var bpUploadDone      = {{ bp_upload_done | tojson }};
+        var bpFilenameFromSvr = {{ bp_filename | tojson }};
+        var qrValue           = {{ qr_value | tojson }};
+        var qrLabel           = {{ qr_label | tojson }};
 
         var STEP_ID_TO_NUM = {
             'step-intro': 0,
@@ -259,6 +274,8 @@
             7: 'step-7'
         };
 
+        // ---- Session step tracking ----
+
         function saveStep(stepNum) {
             fetch('/studio/tutorial/step', {
                 method: 'POST',
@@ -270,6 +287,9 @@
         }
 
         function goToStep(id) {
+            var btn = document.getElementById('step1-advance-btn');
+            if (id === 'step-2' && btn && btn.disabled) return;  // block if upload not done
+
             var steps = document.querySelectorAll('.studio-tutorial-step');
             for (var i = 0; i < steps.length; i++) {
                 steps[i].classList.remove('studio-tutorial-active');
@@ -283,9 +303,99 @@
             }
         }
 
-        // On page load: restore to the step the user was on when they last left.
-        // step-intro is already active in the HTML; only switch if server says > 0.
+        // ---- Step 1: Brightpearl upload ----
+
+        function enableStep1Advance() {
+            var btn = document.getElementById('step1-advance-btn');
+            if (!btn) return;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+        }
+
+        function showStep1Status(type, message) {
+            var el = document.getElementById('step1-upload-status');
+            if (!el) return;
+            if (type === 'success') {
+                el.style.color = '#2d6930';
+            } else if (type === 'error') {
+                el.style.color = '#c23030';
+            } else {
+                el.style.color = '#999';
+            }
+            el.textContent = message;
+            el.style.display = '';
+        }
+
+        function uploadBpFile() {
+            var fileInput = document.getElementById('step1-bp-file');
+            var uploadBtn = document.getElementById('step1-upload-btn');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                showStep1Status('error', 'Please select a file first.');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('bp_file', fileInput.files[0]);
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            showStep1Status('loading', 'Uploading…');
+
+            fetch('/studio/tutorial/upload-bp', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+                if (data.ok) {
+                    showStep1Status('success',
+                        '\u2713 ' + data.filename + ' — ' + data.sku_count + ' SKUs loaded.');
+                    enableStep1Advance();
+                } else {
+                    showStep1Status('error', 'Upload failed: ' + (data.error || 'Unknown error.'));
+                }
+            })
+            .catch(function(err) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+                showStep1Status('error', 'Upload failed: ' + err.message);
+            });
+        }
+
+        // ---- Step 2: QR code rendering ----
+
+        function renderQr() {
+            if (qrValue) {
+                try {
+                    new QRCode(document.getElementById('qr-code-container'), {
+                        text: qrValue,
+                        width: 200,
+                        height: 200,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.M,
+                    });
+                } catch (e) {
+                    console.error('QR render error:', e);
+                }
+                if (qrLabel) {
+                    document.getElementById('qr-label').textContent = qrLabel;
+                }
+            } else {
+                document.getElementById('qr-code-container').style.display = 'none';
+                document.getElementById('qr-no-code').style.display = '';
+            }
+        }
+
+        // ---- Page load ----
+
         document.addEventListener('DOMContentLoaded', function() {
+
+            // Restore step from session
             if (currentStepFromServer > 0) {
                 var targetId = NUM_TO_STEP_ID[currentStepFromServer];
                 if (targetId) {
@@ -296,6 +406,18 @@
                     document.getElementById(targetId).classList.add('studio-tutorial-active');
                 }
             }
+
+            // Step 1 advance button: enable if upload already done this session
+            if (bpUploadDone) {
+                enableStep1Advance();
+                if (bpFilenameFromSvr) {
+                    showStep1Status('success',
+                        '\u2713 ' + bpFilenameFromSvr + ' — already uploaded this session.');
+                }
+            }
+
+            // Render QR code (runs regardless of current step; DOM element always present)
+            renderQr();
         });
     </script>
 </body>
