@@ -6,7 +6,7 @@ import json
 import sqlite3
 import sys
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from functools import wraps
 import bcrypt
 import pytz
@@ -659,14 +659,10 @@ def studio_index():
                 'retail_price': price,
             })
 
-    # Welcome message: neighborhood from store name, week from SKU list filename
+    # Welcome message: neighborhood from store name, week from today's date
     store = get_store_by_id_db(session.get('store_id', ''))
     welcome_neighborhood = parse_neighborhood(store['name']) if store else ''
-    welcome_week_number = None
-    if sku_list_filename:
-        welcome_week_number = iso_week_from_mmddyy(
-            parse_week_identifier(sku_list_filename)
-        )
+    welcome_week_number = date.today().isocalendar()[1]
 
     return render_template('studio.html',
                            sku_items=sku_items,
