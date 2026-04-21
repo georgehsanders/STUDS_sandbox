@@ -316,14 +316,7 @@
                     '</div>' +
                     '<div class="hq-profile-2col" id="profile-details">' + leftCol + rightCol + '</div>' +
                     '<div id="profile-auth" style="display:none;"></div>' +
-                    '<div class="hq-analytics-section" style="margin-top:24px;">' +
-                        '<h3 class="hq-subsection-heading">ANALYTICS</h3>' +
-                        buildStoreAnalytics(storeId) +
-                    '</div>' +
                 '</div>';
-
-            // Render sparkline chart
-            setTimeout(function() { renderSparkline(storeId); }, 50);
 
             // Update time every minute
             if (window._profileTimer) clearInterval(window._profileTimer);
@@ -369,46 +362,6 @@
                 '<div><span class="hq-summary-label">NEW PASSWORD</span><input type="password" id="edit-newpw" class="hq-input hq-inline-input" placeholder="New password..."></div>' +
                 '<div><span class="hq-summary-label">CONFIRM PASSWORD</span><input type="password" id="edit-confirmpw" class="hq-input hq-inline-input" placeholder="Confirm password..."></div>' +
                 '</div></div>';
-        }
-
-        function buildStoreAnalytics(storeId) {
-            var sa = (typeof storeAnalytics !== 'undefined') ? storeAnalytics[storeId] : null;
-            if (!sa) return '<p class="hq-muted-text">No analytics data available.</p>';
-            var html = '<div class="hq-analytics-stats" style="margin-bottom:16px;">' +
-                '<div class="hq-analytics-stat"><div class="hq-summary-label">Compliance Rate</div><div class="hq-summary-value" style="font-size:22px;">' + sa.compliance_rate + '%</div></div>' +
-                '<div class="hq-analytics-stat"><div class="hq-summary-label">Avg Update Lag</div><div class="hq-summary-value" style="font-size:22px;">' + sa.avg_update_lag_hours + ' hrs</div></div>' +
-                '<div class="hq-analytics-stat"><div class="hq-summary-label">Total Discrepancy Units</div><div class="hq-summary-value" style="font-size:22px;">' + sa.total_discrepancy_units + '</div></div>' +
-                '</div>';
-            html += '<div style="height:100px;margin-bottom:16px;"><canvas id="store-sparkline"></canvas></div>';
-            if (sa.chronic_skus && sa.chronic_skus.length) {
-                html += '<h4 class="hq-subsection-heading" style="margin-top:12px;">Frequently Discrepant SKUs</h4>';
-                html += '<table class="hq-table"><thead><tr><th>SKU</th><th>Description</th><th>Occurrences</th></tr></thead><tbody>';
-                sa.chronic_skus.forEach(function(s) {
-                    html += '<tr><td>' + s.sku + '</td><td>' + s.description + '</td><td>' + s.occurrences + '</td></tr>';
-                });
-                html += '</tbody></table>';
-            }
-            return html;
-        }
-
-        function renderSparkline(storeId) {
-            var sa = (typeof storeAnalytics !== 'undefined') ? storeAnalytics[storeId] : null;
-            var canvas = document.getElementById('store-sparkline');
-            if (!sa || !canvas) return;
-            var data = sa.sparkline;
-            var colors = data.map(function(v) { return v === 0 ? '#c8f135' : '#dc2626'; });
-            new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12'],
-                    datasets: [{ data: data, backgroundColor: colors, borderColor: '#000', borderWidth: 1 }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }
-                }
-            });
         }
 
         function saveStore(storeId) {

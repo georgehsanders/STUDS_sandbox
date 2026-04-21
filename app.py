@@ -12,7 +12,7 @@ import bcrypt
 import pytz
 from flask import (Flask, render_template, jsonify, request, redirect,
                    url_for, session, send_file, send_from_directory, flash)
-import analytics_data
+import analytics_begin_count
 from reconcile import (
     INPUT_DIR, STATUS_UPDATED, STATUS_DISCREPANCY, STATUS_INCOMPLETE,
     STATUS_INCOMPLETE_FORMAT, RE_SKU_LIST, RE_VARIANCE, RE_AUDIT_TRAIL,
@@ -2054,8 +2054,47 @@ def hq_section_dashboard():
 @app.route('/hq/section/analytics')
 @hq_login_required
 def hq_section_analytics():
-    data = analytics_data.get_analytics_data()
-    return render_template('fragments/analytics.html', analytics=data)
+    return render_template('fragments/analytics.html')
+
+
+# --- HQ Analytics data routes (Phase 2) ---
+
+def _validated_range(req):
+    """Return a validated range_key from request.args, defaulting to '4w'."""
+    r = req.args.get('range', '4w')
+    return r if r in ('4w', '12w', 'all') else '4w'
+
+
+@app.route('/hq/analytics/overview')
+@hq_login_required
+def hq_analytics_overview():
+    data = analytics_begin_count.get_analytics_overview(_validated_range(request))
+    return jsonify(data)
+
+
+@app.route('/hq/analytics/participation')
+@hq_login_required
+def hq_analytics_participation():
+    data = analytics_begin_count.get_analytics_participation(_validated_range(request))
+    return jsonify(data)
+
+
+@app.route('/hq/analytics/leaderboard')
+@hq_login_required
+def hq_analytics_leaderboard():
+    data = analytics_begin_count.get_analytics_leaderboard(_validated_range(request))
+    return jsonify(data)
+
+
+@app.route('/hq/analytics/studio/<store_id>')
+@hq_login_required
+def hq_analytics_studio(store_id):
+    # 404 if the studio doesn't exist
+    store = get_store_by_id_db(store_id)
+    if not store:
+        return jsonify({'ok': False, 'error': 'Studio not found'}), 404
+    data = analytics_begin_count.get_studio_analytics(store_id, _validated_range(request))
+    return jsonify(data)
 
 
 @app.route('/hq/section/database')
@@ -2115,8 +2154,7 @@ def hq_section_studios():
             'discrepancy_count': s.get('discrepancy_count', 0),
             'net_discrepancy': s.get('net_discrepancy', 0),
         }
-    store_analytics = analytics_data.get_all_store_analytics()
-    return render_template('fragments/studios.html', db_stores=db_stores, recon_status=recon_status, recon_data=recon_data, store_analytics=store_analytics)
+    return render_template('fragments/studios.html', db_stores=db_stores, recon_status=recon_status, recon_data=recon_data)
 
 
 @app.route('/hq/database/upload-msf', methods=['POST'])
@@ -2825,12 +2863,6 @@ def hq_mark_discontinued():
         conn.close()
         flash(f'Flagged as discontinued: {image_filename}', 'success')
     return redirect(url_for('hq_database'))
-
-
-@app.route('/hq/analytics')
-@hq_login_required
-def hq_analytics():
-    return render_template('analytics.html')
 
 
 init_store_db()
