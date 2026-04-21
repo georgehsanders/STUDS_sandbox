@@ -639,6 +639,7 @@
             <h2 class="studio-tutorial-heading">Step 6: Make Your Brightpearl Adjustments</h2>
             <p class="studio-tutorial-body">Below are all SKUs you counted today that have some sort of variance. Use the table below to make all necessary adjustments directly in Brightpearl using reason code "stock check".</p>
             <p class="studio-tutorial-body">Once all adjustments have been made, come back here to continue to the last step.</p>
+            <div id="step6-variance-container">
             {% if not step6_oc_counted_present %}
             <p class="studio-tutorial-placeholder">No count data available. Please complete Step 4 first.</p>
             {% elif step6_variance_rows %}
@@ -669,6 +670,7 @@
             {% else %}
             <p class="studio-tutorial-placeholder">No variances to adjust — all counts match Brightpearl's on-hand quantities.</p>
             {% endif %}
+            </div>
             <button class="studio-tutorial-btn" onclick="goToStep('step-7')">I've done this — onto the last step!</button>
         </div>
 
@@ -801,6 +803,10 @@
         var stepStatusFromSvr   = {{ step_status | tojson }};
         var counterNameFromSvr  = {{ counter_name | tojson }};
 
+        // Maps SKU -> description string; populated by renderVarianceTable() so
+        // renderStep6VarianceTable() can look up descriptions from the same source.
+        var _step4DescMap = {};
+
         // Client-side step tracking (mutable, updated by goToStep)
         var currentClientStep = currentStepFromServer;
         var stepDoneMap = {};
@@ -855,6 +861,8 @@
                 steps[i].classList.remove('studio-tutorial-active');
             }
             document.getElementById(id).classList.add('studio-tutorial-active');
+            // Re-render Step 6 table from current DOM state whenever Step 6 becomes active
+            if (id === 'step-6') { renderStep6VarianceTable(); }
             window.scrollTo(0, 0);
 
             var targetNum = STEP_ID_TO_NUM[id];
@@ -1006,6 +1014,90 @@
             }
         }
 
+        // ---- Step 6: condensed variance table (client-side render) ----
+        // Reads current state from Step 4's DOM inputs so it reflects in-session
+        // uploads and any per-department edits without requiring a page reload.
+        // Called by goToStep('step-6') and on DOMContentLoaded if current step is 6.
+
+        function renderStep6VarianceTable() {
+            var container = document.getElementById('step6-variance-container');
+            if (!container) return;
+
+            // Collect current per-department values from Step 4 table inputs
+            var deptInputs = document.querySelectorAll('#step4-variance-tbody .step4-dept-input');
+            if (!deptInputs || deptInputs.length === 0) {
+                container.innerHTML = '<p class="studio-tutorial-placeholder">No count data available. Please complete Step 4 first.</p>';
+                return;
+            }
+
+            // Aggregate by SKU: sum dept values, read BP from data attribute
+            var skuData = {};
+            deptInputs.forEach(function(input) {
+                var sku    = input.getAttribute('data-sku');
+                var dept   = input.getAttribute('data-dept');
+                var bpRaw  = input.getAttribute('data-bp');
+                var val    = parseInt(input.value, 10) || 0;
+                if (!skuData[sku]) {
+                    skuData[sku] = {
+                        bp: (bpRaw !== '' && bpRaw !== null) ? parseInt(bpRaw, 10) : 0,
+                        accessory: 0, bins_backstock: 0, dcr_piercing: 0, visual_display: 0
+                    };
+                }
+                skuData[sku][dept] = val;
+            });
+
+            // Build rows for non-zero variances only
+            var rows = [];
+            Object.keys(skuData).forEach(function(sku) {
+                var d = skuData[sku];
+                var total = d.accessory + d.bins_backstock + d.dcr_piercing + d.visual_display;
+                var variance = total - d.bp;
+                if (variance !== 0) {
+                    rows.push({
+                        sku: sku,
+                        description: _step4DescMap[sku] || sku,
+                        bp_on_hand: d.bp,
+                        total_counted: total,
+                        variance: variance
+                    });
+                }
+            });
+
+            if (rows.length === 0) {
+                container.innerHTML = '<p class="studio-tutorial-placeholder">No variances to adjust \u2014 all counts match Brightpearl\u2019s on-hand quantities.</p>';
+                return;
+            }
+
+            // Sort by abs(variance) descending, then SKU ascending
+            rows.sort(function(a, b) {
+                var diff = Math.abs(b.variance) - Math.abs(a.variance);
+                return diff !== 0 ? diff : (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0);
+            });
+
+            // Build table HTML — same styling as the server-rendered version
+            var html = '<div class="step7-table-wrap"><table class="step4-variance-table">'
+                + '<thead><tr>'
+                + '<th style="position:sticky;top:0;background:#fff;z-index:1;">SKU</th>'
+                + '<th style="position:sticky;top:0;background:#fff;z-index:1;">Description</th>'
+                + '<th style="position:sticky;top:0;background:#fff;z-index:1;text-align:right;">BP On Hand</th>'
+                + '<th style="position:sticky;top:0;background:#fff;z-index:1;text-align:right;">Total Counted</th>'
+                + '<th style="position:sticky;top:0;background:#fff;z-index:1;text-align:right;">Variance</th>'
+                + '</tr></thead><tbody>';
+            rows.forEach(function(row) {
+                var varClass = row.variance > 0 ? 'step4-var-pos' : 'step4-var-neg';
+                var varText  = row.variance > 0 ? '+' + row.variance : String(row.variance);
+                html += '<tr>'
+                    + '<td><strong>' + escHtml4(row.sku) + '</strong></td>'
+                    + '<td>' + escHtml4(row.description) + '</td>'
+                    + '<td style="text-align:right;">' + row.bp_on_hand + '</td>'
+                    + '<td style="text-align:right;">' + row.total_counted + '</td>'
+                    + '<td style="text-align:right;" class="' + varClass + '">' + varText + '</td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
         // ---- Step 4: OmniCounts upload and variance table ----
 
         function enableStep4Advance() {
@@ -1074,6 +1166,9 @@
         function renderVarianceTable(rows) {
             var tbody = document.getElementById('step4-variance-tbody');
             if (!tbody) return;
+            // Keep description map in sync so renderStep6VarianceTable() can look up names
+            _step4DescMap = {};
+            rows.forEach(function(row) { _step4DescMap[row.sku] = row.description || ''; });
             var html = '';
             rows.forEach(function(row) {
                 var bpText = (row.bp_onhand === null || row.bp_onhand === undefined) ? '\u2014' : row.bp_onhand;
@@ -1484,13 +1579,19 @@
 
             // Step 4 resume: restore variance table if OC already uploaded this session
             if (ocUploaded && varianceRowsFromSvr && varianceRowsFromSvr.length > 0) {
-                renderVarianceTable(varianceRowsFromSvr);
+                renderVarianceTable(varianceRowsFromSvr);  // also populates _step4DescMap
                 document.getElementById('step4-variance-section').style.display = '';
                 enableStep4Advance();
                 if (ocFilenameFromSvr) {
                     showStep4UploadStatus('success',
                         '\u2713 ' + ocFilenameFromSvr + ' \u2014 already uploaded this session.');
                 }
+            }
+
+            // Step 6 resume: re-render the variance table from current DOM state.
+            // _step4DescMap is populated by renderVarianceTable() above when OC data exists.
+            if (currentStepFromServer === 6) {
+                renderStep6VarianceTable();
             }
 
             // Step 4 drag-and-drop
