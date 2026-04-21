@@ -49,8 +49,6 @@
         <div class="hq-zone2">
             <div class="hq-z2-spacer"></div>
             <nav class="hq-section-nav">
-                <a href="#" class="hq-section-link" data-section="dashboard" onclick="loadSection('dashboard'); return false;">DASHBOARD</a>
-                <span class="hq-pipe">|</span>
                 <a href="#" class="hq-section-link" data-section="analytics" onclick="loadSection('analytics'); return false;">ANALYTICS</a>
                 <span class="hq-pipe">|</span>
                 <a href="#" class="hq-section-link" data-section="database" onclick="loadSection('database'); return false;">DATABASE</a>
@@ -151,7 +149,6 @@
                     var subnav = content.querySelector('.hq-analytics-subnav');
                     if (subnav) subnavSlot.appendChild(subnav);
                     history.pushState({section: section}, '', '/hq/?section=' + section);
-                    if (section === 'dashboard') initDashboard();
                     window.scrollTo(0, 0);
                     if (section === 'studios') initStudios();
                 });
@@ -162,81 +159,8 @@
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     document.getElementById('last-loaded').textContent = data.last_loaded;
-                    if (currentSection === 'dashboard') loadSection('dashboard');
                 })
                 .catch(function(err) { alert('Refresh failed: ' + err); });
-        }
-
-        // Dashboard JS
-        function initDashboard() {
-            var modal = document.getElementById('email-modal');
-            if (modal) {
-                modal.addEventListener('click', function(e) {
-                    if (e.target === this) closeEmailModal();
-                });
-            }
-        }
-
-        function toggleDetail(storeId) {
-            var row = document.getElementById('detail-' + storeId);
-            var arrow = document.getElementById('arrow-' + storeId);
-            if (row.style.display === 'none') {
-                row.style.display = 'table-row';
-                arrow.innerHTML = '&#9660;';
-            } else {
-                row.style.display = 'none';
-                arrow.innerHTML = '&#9654;';
-            }
-        }
-
-        function applyFilters() {
-            var filterVal = document.getElementById('filter-status').value;
-            var sortVal = document.getElementById('sort-by').value;
-            var rows = document.querySelectorAll('.hq-store-row');
-            var detailRows = document.querySelectorAll('.hq-detail-row');
-            var pairs = [];
-            rows.forEach(function(row, i) { pairs.push({ row: row, detail: detailRows[i] }); });
-            pairs.forEach(function(p) {
-                var status = p.row.getAttribute('data-status');
-                if (filterVal === 'all' || status === filterVal || (filterVal === 'Incomplete' && status.startsWith('Incomplete'))) {
-                    p.row.style.display = '';
-                } else { p.row.style.display = 'none'; p.detail.style.display = 'none'; }
-            });
-            var tbody = document.getElementById('store-tbody');
-            var sorted = pairs.slice().sort(function(a, b) {
-                if (sortVal === 'store_id') return parseInt(a.row.getAttribute('data-store-id')) - parseInt(b.row.getAttribute('data-store-id'));
-                if (sortVal === 'status') {
-                    var order = {'Discrepancy Detected':0,'Incomplete (missing file)':1,'Incomplete (unrecognized file format)':1,'Updated':2};
-                    return (order[a.row.getAttribute('data-status')]||3) - (order[b.row.getAttribute('data-status')]||3);
-                }
-                if (sortVal === 'discrepancy_count') return parseInt(b.row.getAttribute('data-discrepancy-count')) - parseInt(a.row.getAttribute('data-discrepancy-count'));
-                return 0;
-            });
-            sorted.forEach(function(p) { tbody.appendChild(p.row); tbody.appendChild(p.detail); });
-        }
-
-        function showEmailDraft(storeId) {
-            fetch('/hq/email-draft/' + storeId)
-                .then(function(r) { return r.json(); })
-                .then(function(draft) {
-                    document.getElementById('modal-title').textContent = 'Email Draft — ' + draft.store_name;
-                    document.getElementById('email-to').value = draft.to;
-                    document.getElementById('email-subject').value = draft.subject;
-                    document.getElementById('email-body').value = draft.body;
-                    document.getElementById('email-modal').style.display = 'flex';
-                })
-                .catch(function(err) { alert('Failed to generate email draft: ' + err); });
-        }
-        function closeEmailModal() { document.getElementById('email-modal').style.display = 'none'; }
-        function copyEmailDraft() {
-            var to = document.getElementById('email-to').value;
-            var subject = document.getElementById('email-subject').value;
-            var body = document.getElementById('email-body').value;
-            navigator.clipboard.writeText('To: ' + to + '\nSubject: ' + subject + '\n\n' + body).then(function() {
-                var btn = document.querySelector('.hq-modal-footer .hq-btn');
-                btn.textContent = 'Copied!';
-                setTimeout(function() { btn.textContent = 'COPY TO CLIPBOARD'; }, 2000);
-            });
         }
 
         // Studios JS
@@ -398,8 +322,8 @@
 
         (function() {
             var params = new URLSearchParams(window.location.search);
-            var section = params.get('section');
-            if (section) loadSection(section);
+            var section = params.get('section') || 'analytics';
+            loadSection(section);
         })();
     </script>
 </body>

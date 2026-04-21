@@ -2047,8 +2047,7 @@ def hq_refresh():
 @app.route('/hq/section/dashboard')
 @hq_login_required
 def hq_section_dashboard():
-    results = run_reconciliation()
-    return render_template('fragments/dashboard.html', data=results, settings=load_settings())
+    return redirect(url_for('hq_section_analytics'))
 
 
 @app.route('/hq/section/analytics')
