@@ -540,6 +540,11 @@ def studio_tutorial():
     bp_upload_done = 'begin_count_bp_onhand' in session
     bp_filename = session.get('begin_count_bp_filename', '')
 
+    # Load master lookups (used by both Step 3 grid and Step 4 variance rows)
+    master = load_master_skus()
+    sku_status = load_sku_status()
+    sku_prices = load_sku_prices()
+
     # Step 3: load assigned SKU list using the same helpers as the studio homepage
     scan = scan_input_files()
     assigned_skus = []
@@ -556,9 +561,6 @@ def studio_tutorial():
             if sku and not is_excluded_sku(sku):
                 sku_set.add(sku)
                 sku_names[sku] = name
-        master = load_master_skus()
-        sku_status = load_sku_status()
-        sku_prices = load_sku_prices()
         for sku in sorted(sku_set):
             desc = master.get(sku.upper(), '') or sku_names.get(sku, '') or sku
             image_filename = find_image_for_sku(sku)
@@ -572,6 +574,29 @@ def studio_tutorial():
                 'retail_price': price,
             })
 
+    # Step 4: rebuild variance rows from session if OC count report already uploaded
+    oc_uploaded = 'begin_count_oc_counted' in session
+    oc_filename = session.get('begin_count_oc_filename', '')
+    oc_matched_rows = 0
+    variance_rows = []
+    if oc_uploaded:
+        oc_counted = session.get('begin_count_oc_counted', {})
+        bp_onhand = session.get('begin_count_bp_onhand', {})
+        desc_map = {item['sku'].upper(): item['description'] for item in assigned_skus}
+        for sku in sorted(oc_counted.keys()):
+            desc = desc_map.get(sku.upper(), '') or master.get(sku.upper(), '') or sku
+            counted = oc_counted[sku]
+            bp_val = bp_onhand.get(sku) if bp_onhand else None
+            variance = (counted - bp_val) if bp_val is not None else None
+            variance_rows.append({
+                'sku': sku,
+                'description': desc,
+                'bp_onhand': bp_val,
+                'counted': counted,
+                'variance': variance,
+            })
+        oc_matched_rows = len(variance_rows)
+
     return render_template('studio_tutorial.html',
                            current_step=current_step,
                            current_store_id=current_store_id,
@@ -579,7 +604,12 @@ def studio_tutorial():
                            bp_filename=bp_filename,
                            assigned_skus=assigned_skus,
                            skulist_filename=skulist_filename,
-                           skulist_count=len(assigned_skus))
+                           skulist_count=len(assigned_skus),
+                           oc_uploaded=oc_uploaded,
+                           oc_filename=oc_filename,
+                           oc_matched_rows=oc_matched_rows,
+                           variance_rows=variance_rows,
+                           has_bp=bp_upload_done)
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])
@@ -647,6 +677,137 @@ def studio_tutorial_upload_bp():
         return jsonify({'ok': True, 'sku_count': len(bp_data), 'filename': filename})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/studio/tutorial/upload-oc', methods=['POST'])
+@studio_login_required
+def studio_tutorial_upload_oc():
+    """Accept an OmniCounts Count Report CSV for the Begin Count wizard (Step 4).
+    Sums counts per SKU, filters to this week's assigned SKUs, and stores results in session."""
+    f = request.files.get('oc_file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+    try:
+        filename = f.filename
+        raw_bytes = f.read()
+        text = clean_csv_content(raw_bytes)
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            return jsonify({'ok': False, 'error': 'Could not read file headers'}), 400
+        headers = [h.strip().lower() for h in reader.fieldnames]
+        reader.fieldnames = headers
+
+        # Detect SKU column
+        sku_col = None
+        for candidate in ['sku', 'product sku', 'product code', 'item sku', 'code']:
+            if candidate in headers:
+                sku_col = candidate
+                break
+
+        # Detect Counted column
+        counted_col = None
+        for candidate in ['counted units', 'counted', 'count', 'count qty', 'counted quantity', 'quantity', 'qty']:
+            if candidate in headers:
+                counted_col = candidate
+                break
+
+        if sku_col is None:
+            return jsonify({'ok': False, 'error': 'No SKU column found. Expected one of: SKU, Product SKU, Product Code, Item SKU, Code.'}), 400
+        if counted_col is None:
+            return jsonify({'ok': False, 'error': 'No count column found. Expected one of: Counted Units, Counted, Count, Count Qty, Counted Quantity, Quantity, Qty.'}), 400
+
+        # Sum counts by SKU (multiple rows per SKU are summed)
+        raw_counts = {}
+        for row in reader:
+            sku = (row.get(sku_col) or '').strip().upper()
+            qty_str = (row.get(counted_col) or '').strip()
+            if not sku or is_excluded_sku(sku):
+                continue
+            try:
+                qty = int(float(qty_str))
+            except (ValueError, TypeError):
+                qty = 0
+            raw_counts[sku] = raw_counts.get(sku, 0) + qty
+
+        # Load assigned SKU list to filter results
+        scan = scan_input_files()
+        assigned_set = set()
+        assigned_names = {}
+        if scan['sku_lists']:
+            skulist_path = os.path.join(INPUT_DIR, scan['sku_lists'][0][0])
+            for row in parse_csv(skulist_path):
+                sku = row.get('sku', '').strip().upper()
+                name = row.get('product name', '').strip()
+                if sku and not is_excluded_sku(sku):
+                    assigned_set.add(sku)
+                    assigned_names[sku] = name
+
+        master = load_master_skus()
+
+        # Build counted dict filtered to assigned SKUs (default 0 for missing)
+        oc_counted = {}
+        for sku in sorted(assigned_set):
+            oc_counted[sku] = raw_counts.get(sku, 0)
+
+        session['begin_count_oc_counted'] = oc_counted
+        session['begin_count_oc_filename'] = filename
+        session.modified = True
+
+        # Build variance rows for the response
+        bp_onhand = session.get('begin_count_bp_onhand', {})
+        variance_rows = []
+        for sku in sorted(oc_counted.keys()):
+            desc = master.get(sku, '') or assigned_names.get(sku, '') or sku
+            counted = oc_counted[sku]
+            bp_val = bp_onhand.get(sku) if bp_onhand else None
+            variance = (counted - bp_val) if bp_val is not None else None
+            variance_rows.append({
+                'sku': sku,
+                'description': desc,
+                'bp_onhand': bp_val,
+                'counted': counted,
+                'variance': variance,
+            })
+
+        return jsonify({
+            'ok': True,
+            'sku_count': len(oc_counted),
+            'filename': filename,
+            'variance_rows': variance_rows,
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/studio/tutorial/variance/update', methods=['POST'])
+@studio_login_required
+def studio_tutorial_variance_update():
+    """Update a single SKU's counted quantity in the session (Step 4 editable table)."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data'}), 400
+    sku = (data.get('sku') or '').strip().upper()
+    qty = data.get('qty')
+    if not sku:
+        return jsonify({'ok': False, 'error': 'Missing SKU'}), 400
+    if qty is None:
+        return jsonify({'ok': False, 'error': 'Missing qty'}), 400
+    try:
+        qty = int(qty)
+    except (ValueError, TypeError):
+        return jsonify({'ok': False, 'error': 'qty must be an integer'}), 400
+
+    # Reassign to ensure Flask detects the mutation
+    oc_counted = dict(session.get('begin_count_oc_counted', {}))
+    oc_counted[sku] = qty
+    session['begin_count_oc_counted'] = oc_counted
+    session.modified = True
+
+    bp_onhand = session.get('begin_count_bp_onhand', {})
+    bp_val = bp_onhand.get(sku) if bp_onhand else None
+    variance = (qty - bp_val) if bp_val is not None else None
+
+    return jsonify({'ok': True, 'sku': sku, 'qty': qty, 'variance': variance})
 
 
 @app.route('/studio/omnicounts', methods=['GET', 'POST'])

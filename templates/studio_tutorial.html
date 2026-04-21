@@ -113,14 +113,76 @@
             color: #2d6930;
             margin-top: 20px;
         }
-        /* Step 3 needs full width to accommodate the 5-across SKU grid */
-        #step-3 {
+        /* Steps 3 and 4 need full width (grids/tables) */
+        #step-3, #step-4 {
             max-width: 100%;
         }
         /* Match studio.html's 3-col breakpoint at 1024px (style.css defaults to 2-col) */
         @media (max-width: 1024px) {
             .studio-grid { grid-template-columns: repeat(3, 1fr); }
         }
+
+        /* ---- Step 4: OmniCounts upload ---- */
+        .step4-upload-area {
+            border: 1.5px dashed #ccc;
+            padding: 24px;
+            margin: 0 0 20px 0;
+            background: #fafafa;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .step4-upload-area.drag-over {
+            border-color: #000;
+            background: #f0f0f0;
+        }
+
+        /* ---- Step 4: variance table ---- */
+        .step4-section-heading {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #1a1a1a;
+            margin: 24px 0 12px 0;
+        }
+        .step4-variance-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+        .step4-variance-table thead th {
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #999;
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1.5px solid #000;
+            white-space: nowrap;
+        }
+        .step4-variance-table tbody td {
+            padding: 9px 10px;
+            border-bottom: 1px solid #e0e0e0;
+            color: #1a1a1a;
+            vertical-align: middle;
+        }
+        .step4-variance-table tbody tr:hover { background: #fafafa; }
+        .step4-counted-input {
+            width: 70px;
+            padding: 4px 6px;
+            border: 1px solid #e0e0e0;
+            font-size: 13px;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1a1a1a;
+            text-align: center;
+            border-radius: 0;
+        }
+        .step4-counted-input:focus { border-color: #000; outline: none; }
+        .step4-var-pos  { color: #c23030; font-weight: 600; }
+        .step4-var-neg  { color: #2d6930; font-weight: 600; }
+        .step4-var-zero { color: #999; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
@@ -270,8 +332,35 @@
             <h2 class="studio-tutorial-heading">Step 4: Reconcile Your Variances</h2>
             <p class="studio-tutorial-body">In the OmniCounts Dashboard, go to "Reports" and download your Count Report for this week. Then upload it below.</p>
             <p class="studio-tutorial-body">Once uploaded, you'll see a variance table comparing your Brightpearl on-hand quantities (from Step 1) against the counts you just completed in OmniCounts. You can edit the Counted column directly if you need to correct a count — the variance will recalculate on screen.</p>
-            <!-- PHASE 4: OmniCounts Count Report upload + editable variance table goes here -->
-            <button class="studio-tutorial-btn" onclick="goToStep('step-5')">I've done this — onto the next step!</button>
+            <!-- Upload area -->
+            <div id="step4-upload-area" class="step4-upload-area">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <input type="file" id="step4-oc-file" accept=".csv" style="font-size:13px;color:#1a1a1a;flex:1;min-width:0;">
+                    <button onclick="uploadOcFile()" id="step4-upload-btn" class="studio-tutorial-btn" style="margin-top:0;">Upload</button>
+                </div>
+                <div id="step4-upload-status" style="display:none;margin-top:12px;font-size:13px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;line-height:1.5;"></div>
+            </div>
+
+            <!-- Variance table (hidden until upload succeeds) -->
+            <div id="step4-variance-section" style="display:none;">
+                <div class="step4-section-heading">Variance Report</div>
+                <div style="overflow-x:auto;">
+                    <table class="step4-variance-table" id="step4-variance-table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Description</th>
+                                <th>BP On Hand</th>
+                                <th>Counted</th>
+                                <th>Variance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="step4-variance-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <button class="studio-tutorial-btn" id="step4-advance-btn" onclick="goToStep('step-5')" disabled style="opacity:0.4;cursor:not-allowed;">I've reconciled my variances — onto the next step!</button>
         </div>
 
         <!-- STEP 5 -->
@@ -304,6 +393,10 @@
         var bpFilenameFromSvr = {{ bp_filename | tojson }};
         var totalStep3Skus    = {{ skulist_count | tojson }};
         var step3SkuFilename  = {{ skulist_filename | tojson }};
+        var ocUploaded        = {{ oc_uploaded | tojson }};
+        var ocFilenameFromSvr = {{ oc_filename | tojson }};
+        var varianceRowsFromSvr = {{ variance_rows | tojson }};
+        var hasBp             = {{ has_bp | tojson }};
 
         var STEP_ID_TO_NUM = {
             'step-intro': 0,
@@ -340,8 +433,10 @@
         }
 
         function goToStep(id) {
-            var btn = document.getElementById('step1-advance-btn');
-            if (id === 'step-2' && btn && btn.disabled) return;  // block if upload not done
+            var step1Btn = document.getElementById('step1-advance-btn');
+            if (id === 'step-2' && step1Btn && step1Btn.disabled) return;
+            var step4Btn = document.getElementById('step4-advance-btn');
+            if (id === 'step-5' && step4Btn && step4Btn.disabled) return;
 
             var steps = document.querySelectorAll('.studio-tutorial-step');
             for (var i = 0; i < steps.length; i++) {
@@ -444,6 +539,156 @@
             }
         }
 
+        // ---- Step 4: OmniCounts upload and variance table ----
+
+        function enableStep4Advance() {
+            var btn = document.getElementById('step4-advance-btn');
+            if (!btn) return;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+        }
+
+        function showStep4UploadStatus(type, message) {
+            var el = document.getElementById('step4-upload-status');
+            if (!el) return;
+            if (type === 'success') {
+                el.style.color = '#2d6930';
+            } else if (type === 'error') {
+                el.style.color = '#c23030';
+            } else {
+                el.style.color = '#999';
+            }
+            el.textContent = message;
+            el.style.display = '';
+        }
+
+        function uploadOcFile() {
+            var fileInput = document.getElementById('step4-oc-file');
+            var uploadBtn = document.getElementById('step4-upload-btn');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                showStep4UploadStatus('error', 'Please select a file first.');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('oc_file', fileInput.files[0]);
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            showStep4UploadStatus('loading', 'Uploading\u2026');
+
+            fetch('/studio/tutorial/upload-oc', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+                if (data.ok) {
+                    showStep4UploadStatus('success',
+                        '\u2713 ' + data.filename + ' \u2014 ' + data.sku_count + ' SKUs loaded.');
+                    renderVarianceTable(data.variance_rows);
+                    document.getElementById('step4-variance-section').style.display = '';
+                    enableStep4Advance();
+                } else {
+                    showStep4UploadStatus('error', 'Upload failed: ' + (data.error || 'Unknown error.'));
+                }
+            })
+            .catch(function(err) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+                showStep4UploadStatus('error', 'Upload failed: ' + err.message);
+            });
+        }
+
+        function renderVarianceTable(rows) {
+            var tbody = document.getElementById('step4-variance-tbody');
+            if (!tbody) return;
+            var html = '';
+            rows.forEach(function(row) {
+                var bpText = (row.bp_onhand === null || row.bp_onhand === undefined) ? '\u2014' : row.bp_onhand;
+                var variance = row.variance;
+                var varText, varClass;
+                if (variance === null || variance === undefined) {
+                    varText = '\u2014';
+                    varClass = '';
+                } else if (variance > 0) {
+                    varText = '+' + variance;
+                    varClass = 'step4-var-pos';
+                } else if (variance < 0) {
+                    varText = String(variance);
+                    varClass = 'step4-var-neg';
+                } else {
+                    varText = '0';
+                    varClass = 'step4-var-zero';
+                }
+                var bpAttr = (row.bp_onhand !== null && row.bp_onhand !== undefined) ? row.bp_onhand : '';
+                html += '<tr>'
+                    + '<td><strong>' + escHtml4(row.sku) + '</strong></td>'
+                    + '<td>' + escHtml4(row.description) + '</td>'
+                    + '<td>' + bpText + '</td>'
+                    + '<td><input type="number" class="step4-counted-input"'
+                    +     ' value="' + row.counted + '"'
+                    +     ' data-sku="' + escHtml4(row.sku) + '"'
+                    +     ' data-bp="' + bpAttr + '"'
+                    +     ' oninput="onCountedChange(this)"'
+                    +     ' onchange="onCountedChange(this)"></td>'
+                    + '<td class="' + varClass + '" id="var-cell-' + escHtml4(row.sku) + '">' + varText + '</td>'
+                    + '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function onCountedChange(input) {
+            var sku = input.getAttribute('data-sku');
+            var bpRaw = input.getAttribute('data-bp');
+            var counted = parseInt(input.value, 10);
+            if (isNaN(counted)) counted = 0;
+
+            // Update variance cell immediately
+            var varCell = document.getElementById('var-cell-' + sku);
+            if (varCell) {
+                if (bpRaw === '' || bpRaw === null || bpRaw === undefined) {
+                    varCell.textContent = '\u2014';
+                    varCell.className = '';
+                } else {
+                    var bp = parseInt(bpRaw, 10);
+                    var variance = counted - bp;
+                    if (variance > 0) {
+                        varCell.textContent = '+' + variance;
+                        varCell.className = 'step4-var-pos';
+                    } else if (variance < 0) {
+                        varCell.textContent = String(variance);
+                        varCell.className = 'step4-var-neg';
+                    } else {
+                        varCell.textContent = '0';
+                        varCell.className = 'step4-var-zero';
+                    }
+                }
+            }
+
+            // Debounce persist to session
+            clearTimeout(input._saveTimer);
+            input._saveTimer = setTimeout(function() {
+                fetch('/studio/tutorial/variance/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({sku: sku, qty: counted}),
+                }).catch(function(err) {
+                    console.error('Failed to persist variance edit:', err);
+                });
+            }, 600);
+        }
+
+        function escHtml4(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
         // ---- Page load ----
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -481,6 +726,42 @@
                 });
             } catch(e) {}
             {% endfor %}
+
+            // Step 4 resume: restore variance table if OC already uploaded this session
+            if (ocUploaded && varianceRowsFromSvr && varianceRowsFromSvr.length > 0) {
+                renderVarianceTable(varianceRowsFromSvr);
+                document.getElementById('step4-variance-section').style.display = '';
+                enableStep4Advance();
+                if (ocFilenameFromSvr) {
+                    showStep4UploadStatus('success',
+                        '\u2713 ' + ocFilenameFromSvr + ' \u2014 already uploaded this session.');
+                }
+            }
+
+            // Step 4 drag-and-drop
+            var step4Area = document.getElementById('step4-upload-area');
+            if (step4Area) {
+                step4Area.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    step4Area.classList.add('drag-over');
+                });
+                step4Area.addEventListener('dragleave', function() {
+                    step4Area.classList.remove('drag-over');
+                });
+                step4Area.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    step4Area.classList.remove('drag-over');
+                    var files = e.dataTransfer.files;
+                    if (files && files[0]) {
+                        try {
+                            var dt = new DataTransfer();
+                            dt.items.add(files[0]);
+                            document.getElementById('step4-oc-file').files = dt.files;
+                        } catch(ex) {}
+                        uploadOcFile();
+                    }
+                });
+            }
 
         });
     </script>
