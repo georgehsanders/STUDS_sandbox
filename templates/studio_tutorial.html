@@ -648,6 +648,10 @@
                         <span class="step7-summary-label">Completed</span>
                         <span class="step7-summary-value" id="s7-completed-at">—</span>
                     </div>
+                    <div class="step7-summary-row" id="s7-row-duration">
+                        <span class="step7-summary-label">Duration</span>
+                        <span class="step7-summary-value" id="s7-duration">—</span>
+                    </div>
                 </div>
 
                 <!-- Section 4: Back to Dashboard + Reset -->
@@ -1199,6 +1203,8 @@
                 el = document.getElementById('s7-completed-at'); if (el) el.textContent = s.completed_at;
                 el = document.getElementById('s7-row-date');      if (el) el.style.display = '';
             }
+            el = document.getElementById('s7-duration');
+            if (el) el.textContent = (s.duration !== undefined && s.duration !== null) ? s.duration : '\u2014';
         }
 
         // ---- Page load ----

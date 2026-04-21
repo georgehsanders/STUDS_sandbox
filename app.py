@@ -5,7 +5,7 @@ import io
 import json
 import sqlite3
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 import bcrypt
 import pytz
@@ -532,6 +532,31 @@ def studio_index():
                            no_sku_list=no_sku_list)
 
 
+def format_duration(seconds):
+    """Format elapsed seconds as a compact human-readable string.
+    <1m / 25m / 1h 23m"""
+    if seconds < 0:
+        seconds = 0
+    if seconds < 60:
+        return '<1m'
+    if seconds < 3600:
+        return '{}m'.format(int(seconds // 60))
+    return '{}h {}m'.format(int(seconds // 3600), int((seconds % 3600) // 60))
+
+
+def _resume_duration(sess):
+    """Compute duration string from begin_count_started_at in session, or '—'."""
+    started_at = sess.get('begin_count_started_at')
+    if not started_at:
+        return '\u2014'
+    try:
+        start = datetime.fromisoformat(started_at)
+        elapsed = (datetime.now(timezone.utc) - start).total_seconds()
+        return format_duration(elapsed)
+    except Exception:
+        return '\u2014'
+
+
 @app.route('/studio/tutorial')
 @studio_login_required
 def studio_tutorial():
@@ -630,6 +655,7 @@ def studio_tutorial():
             'bp_verify_filename': bp_verify_filename,
             'completed_at': '',  # not recorded on resume
             'counter_name': session.get('begin_count_counter_name', ''),
+            'duration': _resume_duration(session),
         }
 
     # Step indicator: compute completion state per step (1–7)
@@ -687,6 +713,10 @@ def studio_tutorial_step():
         return jsonify({'ok': False, 'error': 'step must be an integer 0–7'}), 400
     old_step = session.get('begin_count_step', 0)
     session['begin_count_step'] = step
+    # Capture start timestamp exactly once: intro (0) → Step 1 transition.
+    # Guard prevents the timer resetting if the user navigates backward and re-enters Step 1.
+    if step == 1 and old_step == 0 and 'begin_count_started_at' not in session:
+        session['begin_count_started_at'] = datetime.now(timezone.utc).isoformat()
     # When advancing forward, mark the step being left as done.
     # Steps 1, 4, 7 use data-presence checks; only 2, 3, 5, 6 need explicit flags.
     if step > old_step:
@@ -1001,6 +1031,7 @@ def studio_tutorial_upload_bp_verify():
             'bp_verify_filename': filename,
             'completed_at': completed_at,
             'counter_name': session.get('begin_count_counter_name', ''),
+            'duration': _resume_duration(session),
         }
 
         return jsonify({
@@ -1031,6 +1062,7 @@ def studio_tutorial_reset():
         'begin_count_step5_done',
         'begin_count_step6_done',
         'begin_count_counter_name',
+        'begin_count_started_at',
     ]
     for key in _keys:
         session.pop(key, None)
