@@ -243,6 +243,17 @@
             color: #2d6930;
             margin: 0;
         }
+        /* Warning state: some variances still off */
+        .step7-complete-banner.step7-banner-warn {
+            background: #fff8e6;
+            border-color: #b88a00;
+        }
+        .step7-complete-banner.step7-banner-warn .step7-complete-banner-heading {
+            color: #5a3e00;
+        }
+        .step7-complete-banner.step7-banner-warn .step7-complete-banner-sub {
+            color: #7a5700;
+        }
 
         /* ---- Step 7: screenshot summary block ---- */
         .step7-summary {
@@ -505,10 +516,10 @@
                     </table>
                 </div>
 
-                <!-- Section 3: Completion banner -->
-                <div class="step7-complete-banner">
+                <!-- Section 3: Completion banner — copy and style set by populateSummary() -->
+                <div class="step7-complete-banner" id="step7-banner">
                     <div class="step7-complete-banner-heading">Stock Check complete!</div>
-                    <p class="step7-complete-banner-sub">All adjustments have been verified. Great work.</p>
+                    <p class="step7-complete-banner-sub" id="step7-banner-sub">All adjustments have been verified. Great work.</p>
                 </div>
 
                 <!-- Section 3 (cont.): Screenshot-able summary -->
@@ -934,6 +945,19 @@
             el = document.getElementById('s7-total');      if (el) el.textContent = s.total_skus;
             el = document.getElementById('s7-reconciled'); if (el) el.textContent = s.reconciled;
             el = document.getElementById('s7-still-off');  if (el) el.textContent = s.still_off;
+
+            // Adapt banner copy and style based on whether any variances remain
+            var banner = document.getElementById('step7-banner');
+            var bannerSub = document.getElementById('step7-banner-sub');
+            if (banner && bannerSub) {
+                if (s.still_off > 0) {
+                    banner.classList.add('step7-banner-warn');
+                    bannerSub.textContent = 'Some variances still need attention \u2014 see the crosscheck table above for details.';
+                } else {
+                    banner.classList.remove('step7-banner-warn');
+                    bannerSub.textContent = 'All adjustments have been verified. Great work.';
+                }
+            }
             if (s.bp_filename) {
                 el = document.getElementById('s7-bp-file');  if (el) el.textContent = s.bp_filename;
                 el = document.getElementById('s7-row-bp');   if (el) el.style.display = '';
