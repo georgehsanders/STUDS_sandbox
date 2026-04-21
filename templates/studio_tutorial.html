@@ -99,24 +99,6 @@
         .studio-tutorial-btn:hover {
             background: #d9a0ec;
         }
-        .studio-tutorial-link {
-            display: inline-flex;
-            align-items: center;
-            padding: 0 16px;
-            height: 34px;
-            white-space: nowrap;
-            border: 1.5px solid #000;
-            border-radius: 0;
-            background: #e8b4f8;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 11px;
-            font-weight: 400;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #000;
-            text-decoration: none;
-            margin-bottom: 16px;
-        }
         .studio-tutorial-placeholder {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             font-size: 15px;
@@ -187,82 +169,106 @@
         <!-- STEP 1 -->
         <div class="studio-tutorial-step" id="step-1">
             <h2 class="studio-tutorial-heading">Step 1: Brightpearl Inventory Summary</h2>
-            <p class="studio-tutorial-body">Download a Brightpearl inventory summary.</p>
+            <p class="studio-tutorial-body">Download a Brightpearl Inventory Summary for your studio and upload it here.</p>
             <p class="studio-tutorial-sublist-label">Here's how:</p>
             <ol class="studio-tutorial-sublist">
-                <li>Login to <a href="https://www.brightpearl.com" target="_blank" rel="noopener">Brightpearl</a></li>
+                <li>Login to Brightpearl.</li>
                 <li>Click "Products"</li>
                 <li>Click "Inventory Summary"</li>
                 <li>Go to the "warehouse" dropdown menu and select your studio.</li>
                 <li>Click "Filter".</li>
                 <li>Click "Export" to download your studio's inventory summary.</li>
             </ol>
-            <p class="studio-tutorial-body">The inventory summary will download to your laptop.</p>
+            <p class="studio-tutorial-body">Once the file is downloaded, drop it into the upload box below.</p>
+            <!-- PHASE 2: Brightpearl Inventory Summary file upload control goes here -->
             <button class="studio-tutorial-btn" onclick="goToStep('step-2')">I've done this — onto the next step!</button>
         </div>
 
         <!-- STEP 2 -->
         <div class="studio-tutorial-step" id="step-2">
-            <h2 class="studio-tutorial-heading">Step 2: Converting Brightpearl Inventory Summary into OmniCounts File</h2>
-            <p class="studio-tutorial-body">Click 'Choose File' and select the Brightpearl Inventory Summary you just downloaded. Then, type in your studio number with no zeros before the number (example: if you are studio 033 CA Fashion Island, just enter 33.) Then click 'Generate'. You can use the OmniCounts generator on the OMNICOUNTS page of this portal.</p>
-            <a href="/studio/omnicounts" target="_blank" rel="noopener" class="studio-tutorial-link">Open OmniCounts Generator</a>
-            <br>
+            <h2 class="studio-tutorial-heading">Step 2: Log into OmniCounts and Scan Your Studio's QR Code</h2>
+            <p class="studio-tutorial-body">Log into the OmniCounts Dashboard on your laptop. Then open the OmniCounts app on your mobile phone and scan the QR code below.</p>
+            <!-- PHASE 2: QR code image for studio 002 Hudson Yards goes here -->
             <button class="studio-tutorial-btn" onclick="goToStep('step-3')">I've done this — onto the next step!</button>
         </div>
 
         <!-- STEP 3 -->
         <div class="studio-tutorial-step" id="step-3">
-            <h2 class="studio-tutorial-heading">Step 3: Data Dumping OmniCounts File into Filezilla</h2>
-            <p class="studio-tutorial-body">Then, go to Filezilla. This app is already downloaded on your laptop.</p>
-            <p class="studio-tutorial-placeholder">(Jasmine to add more details here later because this part is kind of annoying to flesh out rn)</p>
-            <button class="studio-tutorial-btn" onclick="goToStep('step-4')">I've done this — onto the next step!</button>
+            <h2 class="studio-tutorial-heading">Step 3: Count This Week's Assigned SKUs</h2>
+            <p class="studio-tutorial-body">Begin counting this week's assigned SKUs using the OmniCounts app on your mobile device. The list below is for your reference.</p>
+            <p class="studio-tutorial-body">Once all counts are finalized and complete, go into the OmniCounts Dashboard and select "Soft Close" followed by "Close Inventory."</p>
+            <!-- PHASE 3: 5-across SKU reference grid (mirrors main catalog layout) goes here -->
+            <button class="studio-tutorial-btn" onclick="goToStep('step-4')">I've finished my counts and have closed my inventory in OmniCounts — onto the next step!</button>
         </div>
 
         <!-- STEP 4 -->
         <div class="studio-tutorial-step" id="step-4">
-            <h2 class="studio-tutorial-heading">Step 4: Printing your SKU List</h2>
-            <p class="studio-tutorial-body">Setup is almost done! Now, print out your list of assigned SKUs for the week. You'll need the barcodes of the SKUs for the next few steps. If your printer is out of ink, you can download the list of assigned SKUs as a PDF or just scan barcodes directly from the studio portal. Assign OmniCount area tag 100 to your printed barcode sheet, or have it handy if you're using your computer.</p>
+            <h2 class="studio-tutorial-heading">Step 4: Reconcile Your Variances</h2>
+            <p class="studio-tutorial-body">In the OmniCounts Dashboard, go to "Reports" and download your Count Report for this week. Then upload it below.</p>
+            <p class="studio-tutorial-body">Once uploaded, you'll see a variance table comparing your Brightpearl on-hand quantities (from Step 1) against the counts you just completed in OmniCounts. You can edit the Counted column directly if you need to correct a count — the variance will recalculate on screen.</p>
+            <!-- PHASE 4: OmniCounts Count Report upload + editable variance table goes here -->
             <button class="studio-tutorial-btn" onclick="goToStep('step-5')">I've done this — onto the next step!</button>
         </div>
 
         <!-- STEP 5 -->
         <div class="studio-tutorial-step" id="step-5">
-            <h2 class="studio-tutorial-heading">Step 5: Begin your count!</h2>
-            <p class="studio-tutorial-placeholder">(Jasmine to add more details here later because this part is kind of annoying to flesh out rn)</p>
-            <button class="studio-tutorial-btn" onclick="goToStep('step-6')">I'm done counting — onto the next step!</button>
+            <h2 class="studio-tutorial-heading">Step 5: Check for Major Variances</h2>
+            <p class="studio-tutorial-body">Look over your variance table. If you see something that looks off, go recount that SKU and confirm the quantity matches.</p>
+            <button class="studio-tutorial-btn" onclick="goToStep('step-6')">I have verified my counts for accuracy — onto the next step!</button>
         </div>
 
         <!-- STEP 6 -->
         <div class="studio-tutorial-step" id="step-6">
-            <h2 class="studio-tutorial-heading">Step 6: Close Out Your Count in the OmniCounts dashboard.</h2>
-            <p class="studio-tutorial-placeholder">(Jasmine to add more details here later.)</p>
-            <button class="studio-tutorial-btn" onclick="goToStep('step-7')">My count is closed — onto the next step!</button>
+            <h2 class="studio-tutorial-heading">Step 6: Make Your Brightpearl Adjustments</h2>
+            <p class="studio-tutorial-body">Use the variance report from Step 4 to make all necessary adjustments directly in Brightpearl.</p>
+            <p class="studio-tutorial-body">Once all adjustments have been made, come back here and continue to the last step.</p>
+            <button class="studio-tutorial-btn" onclick="goToStep('step-7')">I've done this — onto the last step!</button>
         </div>
 
         <!-- STEP 7 -->
         <div class="studio-tutorial-step" id="step-7">
-            <h2 class="studio-tutorial-heading">Step 7: Reconcile your variances.</h2>
-            <p class="studio-tutorial-body">Once you've closed your count, handoffs@omnicounts.com will send the studio an email with your variance report attached (what Brightpearl says you have versus what you counted today). Download the attachment in that email.</p>
-            <button class="studio-tutorial-btn" onclick="goToStep('step-8')">I have my variance report — onto the next step!</button>
-        </div>
-
-        <!-- STEP 8 -->
-        <div class="studio-tutorial-step" id="step-8">
-            <h2 class="studio-tutorial-heading">Step 8: Check for major variances</h2>
-            <p class="studio-tutorial-body">If you see something that looks off, recount that SKU and confirm the quantity matches.</p>
-            <button class="studio-tutorial-btn" onclick="goToStep('step-9')">I have verified my counts for accuracy — onto the last step!</button>
-        </div>
-
-        <!-- STEP 9 -->
-        <div class="studio-tutorial-step" id="step-9">
-            <h2 class="studio-tutorial-heading">Step 9: Make adjustments in Brightpearl</h2>
-            <p class="studio-tutorial-body">Once you've confirmed all your counts are accurate to what you have on hand, use the variance report to make all necessary adjustments in Brightpearl.</p>
-            <p class="studio-tutorial-complete">Once all adjustments have been made, your Stock Check is complete!</p>
+            <h2 class="studio-tutorial-heading">Step 7: Adjustment Verification</h2>
+            <p class="studio-tutorial-body">After completing your adjustments in Brightpearl, download a fresh Inventory Summary Report and upload it below. We'll crosscheck it against your reported variances to confirm everything was accurately accounted for.</p>
+            <!-- PHASE 5: Fresh Brightpearl Inventory Summary upload + crosscheck table + "Stock Check complete!" banner + summary + "Back to Dashboard" button go here -->
         </div>
 
     </div>
 
     <script>
+        var currentStepFromServer = {{ current_step | tojson }};
+
+        var STEP_ID_TO_NUM = {
+            'step-intro': 0,
+            'step-1': 1,
+            'step-2': 2,
+            'step-3': 3,
+            'step-4': 4,
+            'step-5': 5,
+            'step-6': 6,
+            'step-7': 7
+        };
+
+        var NUM_TO_STEP_ID = {
+            0: 'step-intro',
+            1: 'step-1',
+            2: 'step-2',
+            3: 'step-3',
+            4: 'step-4',
+            5: 'step-5',
+            6: 'step-6',
+            7: 'step-7'
+        };
+
+        function saveStep(stepNum) {
+            fetch('/studio/tutorial/step', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({step: stepNum}),
+            }).catch(function(err) {
+                console.error('Failed to save step to session:', err);
+            });
+        }
+
         function goToStep(id) {
             var steps = document.querySelectorAll('.studio-tutorial-step');
             for (var i = 0; i < steps.length; i++) {
@@ -270,7 +276,27 @@
             }
             document.getElementById(id).classList.add('studio-tutorial-active');
             window.scrollTo(0, 0);
+
+            var stepNum = STEP_ID_TO_NUM[id];
+            if (stepNum !== undefined) {
+                saveStep(stepNum);
+            }
         }
+
+        // On page load: restore to the step the user was on when they last left.
+        // step-intro is already active in the HTML; only switch if server says > 0.
+        document.addEventListener('DOMContentLoaded', function() {
+            if (currentStepFromServer > 0) {
+                var targetId = NUM_TO_STEP_ID[currentStepFromServer];
+                if (targetId) {
+                    var steps = document.querySelectorAll('.studio-tutorial-step');
+                    for (var i = 0; i < steps.length; i++) {
+                        steps[i].classList.remove('studio-tutorial-active');
+                    }
+                    document.getElementById(targetId).classList.add('studio-tutorial-active');
+                }
+            }
+        });
     </script>
 </body>
 </html>

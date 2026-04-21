@@ -535,7 +535,23 @@ def studio_index():
 @app.route('/studio/tutorial')
 @studio_login_required
 def studio_tutorial():
-    return render_template('studio_tutorial.html')
+    current_step = session.get('begin_count_step', 0)
+    return render_template('studio_tutorial.html', current_step=current_step)
+
+
+@app.route('/studio/tutorial/step', methods=['POST'])
+@studio_login_required
+def studio_tutorial_step():
+    data = request.get_json()
+    if not data:
+        return jsonify({'ok': False, 'error': 'No data'}), 400
+    step = data.get('step')
+    if step is None:
+        return jsonify({'ok': False, 'error': 'Missing step field'}), 400
+    if not isinstance(step, int) or step < 0 or step > 7:
+        return jsonify({'ok': False, 'error': 'step must be an integer 0–7'}), 400
+    session['begin_count_step'] = step
+    return jsonify({'ok': True})
 
 
 @app.route('/studio/omnicounts', methods=['GET', 'POST'])
