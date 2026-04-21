@@ -526,14 +526,10 @@ def studio_index():
                 'retail_price': price,
             })
 
-    import datetime
-    studio_week_number = (datetime.date.today() + datetime.timedelta(days=1)).isocalendar()[1]
-
     return render_template('studio.html',
                            sku_items=sku_items,
                            sku_list_filename=sku_list_filename,
-                           no_sku_list=no_sku_list,
-                           studio_week_number=studio_week_number)
+                           no_sku_list=no_sku_list)
 
 
 @app.route('/studio/tutorial')
@@ -572,26 +568,16 @@ def studio_catalog():
     if not session.get('studio_logged_in') and not session.get('hq_logged_in'):
         return redirect(url_for('studio_login'))
 
-    skus = {}
     master_filename = None
-    sku_count = 0
+    master = {}
+    sku_status = {}
+    sku_prices = {}
     msf_path = os.path.join(MASTER_DIR, 'SKU_Master.csv')
     if os.path.isfile(msf_path):
         master_filename = 'SKU_Master.csv'
         master = load_master_skus()
         sku_status = load_sku_status()
         sku_prices = load_sku_prices()
-        for sku_code, desc in master.items():
-            if not is_excluded_sku(sku_code):
-                img = find_image_for_sku(sku_code)
-                skus[sku_code] = {
-                    'sku': sku_code,
-                    'description': desc,
-                    'image_filename': img,
-                    'status': sku_status.get(sku_code),
-                    'retail_price': sku_prices.get(sku_code),
-                }
-        sku_count = len(skus)
 
     displays = []
     planogram_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'planogram_order.json')
@@ -603,6 +589,36 @@ def studio_catalog():
         except Exception:
             pass
 
+    skus = {}
+    for display in displays:
+        for slot in display.get('slots', []):
+            slot_desc = slot.get('description', '')
+            slot_price = slot.get('price')
+            for sku_code in slot.get('skus', []):
+                upper = sku_code.strip().upper()
+                if upper in skus or is_excluded_sku(upper):
+                    continue
+                desc = master.get(upper) or slot_desc or ''
+                price = sku_prices.get(upper) if upper in sku_prices else slot_price
+                skus[upper] = {
+                    'sku': upper,
+                    'description': desc,
+                    'image_filename': find_image_for_sku(upper),
+                    'status': sku_status.get(upper),
+                    'retail_price': price,
+                }
+    # Also include master SKUs not covered by the planogram
+    for sku_code, desc in master.items():
+        if sku_code not in skus and not is_excluded_sku(sku_code):
+            skus[sku_code] = {
+                'sku': sku_code,
+                'description': desc,
+                'image_filename': find_image_for_sku(sku_code),
+                'status': sku_status.get(sku_code),
+                'retail_price': sku_prices.get(sku_code),
+            }
+
+    sku_count = len(skus)
     return render_template('catalog.html',
                            skus=skus,
                            displays=displays,
@@ -1780,6 +1796,7 @@ def inject_globals():
     return {
         'current_user_name': session.get('display_name', ''),
         'last_loaded_global': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'studio_week_number': datetime.now().isocalendar()[1],
     }
 
 
