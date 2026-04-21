@@ -113,7 +113,16 @@
             color: #2d6930;
             margin-top: 20px;
         }
+        /* Step 3 needs full width to accommodate the 5-across SKU grid */
+        #step-3 {
+            max-width: 100%;
+        }
+        /* Match studio.html's 3-col breakpoint at 1024px (style.css defaults to 2-col) */
+        @media (max-width: 1024px) {
+            .studio-grid { grid-template-columns: repeat(3, 1fr); }
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
 <body class="studio-body">
 
@@ -214,8 +223,46 @@
             <h2 class="studio-tutorial-heading">Step 3: Count This Week's Assigned SKUs</h2>
             <p class="studio-tutorial-body">Begin counting this week's assigned SKUs using the OmniCounts app on your mobile device. The list below is for your reference.</p>
             <p class="studio-tutorial-body">Once all counts are finalized and complete, go into the OmniCounts Dashboard and select "Soft Close" followed by "Close Inventory."</p>
-            <!-- PHASE 3: 5-across SKU reference grid (mirrors main catalog layout) goes here -->
-            <button class="studio-tutorial-btn" onclick="goToStep('step-4')">I've finished my counts and have closed my inventory in OmniCounts — onto the next step!</button>
+            {% if skulist_filename %}
+            <div class="studio-search-bar" style="margin-bottom:16px;">
+                <input type="text" id="step3-search" class="studio-search-input" placeholder="Search SKUs or descriptions..." oninput="filterStep3Cards()">
+                <p class="studio-sku-count" id="step3-sku-count">{{ skulist_count }} SKUs assigned this week — {{ skulist_filename }}</p>
+            </div>
+            <div class="studio-grid" id="step3-grid">
+                {% for item in assigned_skus %}
+                <div class="studio-card" data-sku="{{ item.sku|lower }}" data-desc="{{ item.description|lower }}">
+                    {% if item.image_filename %}
+                    <div class="studio-card-img">
+                        <img src="/database/images/{{ item.image_filename }}" alt="{{ item.sku }}">
+                        {% if item.status %}
+                        <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="studio-card-img studio-card-noimg">
+                        <span>No image</span>
+                        {% if item.status %}
+                        <span class="studio-sku-tag studio-sku-tag-{{ item.status }}">{{ item.status|upper }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="studio-card-info">
+                        <div>
+                            <div class="studio-card-sku">{{ item.sku }}</div>
+                            <div class="studio-card-desc">{{ item.description }}</div>
+                        </div>
+                        {% if item.retail_price is not none %}
+                        <div class="studio-sku-price">${{ '%.2f'|format(item.retail_price) }}</div>
+                        {% endif %}
+                    </div>
+                    <svg id="barcode-step3-{{ item.sku }}"></svg>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="studio-empty-message">No active SKU list found. Please check back when a count has been scheduled.</p>
+            {% endif %}
+            <button class="studio-tutorial-btn" style="margin-top:28px;" onclick="goToStep('step-4')">I've finished my counts and have closed my inventory in OmniCounts — onto the next step!</button>
         </div>
 
         <!-- STEP 4 -->
@@ -255,6 +302,8 @@
         var currentStepFromServer = {{ current_step | tojson }};
         var bpUploadDone      = {{ bp_upload_done | tojson }};
         var bpFilenameFromSvr = {{ bp_filename | tojson }};
+        var totalStep3Skus    = {{ skulist_count | tojson }};
+        var step3SkuFilename  = {{ skulist_filename | tojson }};
 
         var STEP_ID_TO_NUM = {
             'step-intro': 0,
@@ -370,6 +419,31 @@
             });
         }
 
+        // ---- Step 3: SKU reference grid search ----
+
+        function filterStep3Cards() {
+            var query = document.getElementById('step3-search').value.toLowerCase();
+            var cards = document.querySelectorAll('#step3-grid .studio-card');
+            var visible = 0;
+            cards.forEach(function(card) {
+                var sku  = card.getAttribute('data-sku');
+                var desc = card.getAttribute('data-desc');
+                if (sku.indexOf(query) !== -1 || desc.indexOf(query) !== -1) {
+                    card.style.display = '';
+                    visible++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            var countEl = document.getElementById('step3-sku-count');
+            if (!countEl) return;
+            if (query) {
+                countEl.textContent = 'Showing ' + visible + ' of ' + totalStep3Skus + ' SKUs';
+            } else {
+                countEl.textContent = totalStep3Skus + ' SKUs assigned this week — ' + step3SkuFilename;
+            }
+        }
+
         // ---- Page load ----
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -394,6 +468,19 @@
                         '\u2713 ' + bpFilenameFromSvr + ' — already uploaded this session.');
                 }
             }
+
+            // Step 3: render barcodes for SKU reference grid
+            {% for item in assigned_skus %}
+            try {
+                JsBarcode('#barcode-step3-{{ item.sku }}', '{{ item.sku }}', {
+                    format: 'CODE128',
+                    width: 1,
+                    height: 28,
+                    displayValue: false,
+                    margin: 0
+                });
+            } catch(e) {}
+            {% endfor %}
 
         });
     </script>

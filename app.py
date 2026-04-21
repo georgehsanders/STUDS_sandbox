@@ -539,11 +539,47 @@ def studio_tutorial():
     current_store_id = session.get('store_id', '').lstrip('0') or '0'
     bp_upload_done = 'begin_count_bp_onhand' in session
     bp_filename = session.get('begin_count_bp_filename', '')
+
+    # Step 3: load assigned SKU list using the same helpers as the studio homepage
+    scan = scan_input_files()
+    assigned_skus = []
+    skulist_filename = None
+    if scan['sku_lists']:
+        skulist_filename = scan['sku_lists'][0][0]
+        filepath = os.path.join(INPUT_DIR, skulist_filename)
+        sku_rows = parse_csv(filepath)
+        sku_names = {}
+        sku_set = set()
+        for row in sku_rows:
+            sku = row.get('sku', '').strip()
+            name = row.get('product name', '').strip()
+            if sku and not is_excluded_sku(sku):
+                sku_set.add(sku)
+                sku_names[sku] = name
+        master = load_master_skus()
+        sku_status = load_sku_status()
+        sku_prices = load_sku_prices()
+        for sku in sorted(sku_set):
+            desc = master.get(sku.upper(), '') or sku_names.get(sku, '') or sku
+            image_filename = find_image_for_sku(sku)
+            status = sku_status.get(sku.upper())
+            price = sku_prices.get(sku.upper())
+            assigned_skus.append({
+                'sku': sku,
+                'description': desc,
+                'image_filename': image_filename,
+                'status': status,
+                'retail_price': price,
+            })
+
     return render_template('studio_tutorial.html',
                            current_step=current_step,
                            current_store_id=current_store_id,
                            bp_upload_done=bp_upload_done,
-                           bp_filename=bp_filename)
+                           bp_filename=bp_filename,
+                           assigned_skus=assigned_skus,
+                           skulist_filename=skulist_filename,
+                           skulist_count=len(assigned_skus))
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])
