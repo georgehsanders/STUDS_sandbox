@@ -765,6 +765,52 @@ def parse_neighborhood(store_name):
     return ' '.join(tokens[2:])
 
 
+# Department mapping for Step 4 per-department variance columns
+DEPARTMENT_KEYS = ['accessory', 'bins_backstock', 'dcr_piercing', 'visual_display']
+DEPARTMENT_LABELS = ['Accessory', 'Bins & Backstock', 'DCR/Piercing Room', 'Visual Display']
+
+# Ordered from most-specific to most-general so prefix checks don't shadow each other.
+_DEPARTMENT_MAPPING = [
+    ('fashion inv',           'bins_backstock'),  # "Fashion Inv - Bins & Backstock"
+    ('piercing inv - bins',   'bins_backstock'),  # "Piercing Inv - Bins & Backstock"
+    ('piercing inv - dcr',    'dcr_piercing'),    # "Piercing Inv - DCR &Piercing Rooms"
+    ('accessory inv',         'accessory'),       # all "Accessory Inv - *" rows
+    ('visual display',        'visual_display'),  # "Visual Display Inv - Barcode Sheets"
+]
+
+
+def map_department_desc(dept_desc):
+    """Maps a raw "Department Desc" value from the OmniCounts Count Report
+    to one of four abbreviated column keys:
+      - "accessory"
+      - "bins_backstock"
+      - "dcr_piercing"
+      - "visual_display"
+    Returns None if no mapping matches (caller should skip and log these rows).
+
+    Matching is case-insensitive and tolerates extra whitespace.  A substring
+    match is used so minor label variations (extra punctuation, spacing) are
+    handled gracefully.
+
+    Known mappings:
+      Accessory Inv - Insertion Tools     -> accessory
+      Accessory Inv - Jewelry Boxes       -> accessory
+      Accessory Inv - Piercing Pillows    -> accessory
+      Accessory Inv - Saline              -> accessory
+      Fashion Inv - Bins & Backstock      -> bins_backstock
+      Piercing Inv - Bins & Backstock     -> bins_backstock
+      Piercing Inv - DCR &Piercing Rooms  -> dcr_piercing
+      Visual Display Inv - Barcode Sheets -> visual_display
+    """
+    if not dept_desc:
+        return None
+    normalized = ' '.join(dept_desc.strip().lower().split())
+    for pattern, key in _DEPARTMENT_MAPPING:
+        if pattern in normalized:
+            return key
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Begin Count analytics — write-hook helpers
 #
@@ -998,6 +1044,16 @@ def studio_tutorial():
                 'retail_price': price,
             })
 
+    # Migration: if session has the old flat shape (sku -> int) instead of the new
+    # nested shape (sku -> {dept: int, ...}), wipe it so the user re-uploads.
+    _oc_raw = session.get('begin_count_oc_counted', {})
+    if _oc_raw and any(isinstance(v, int) for v in _oc_raw.values()):
+        print('[migrate] begin_count_oc_counted has old flat shape — wiping for re-upload',
+              file=sys.stderr)
+        session.pop('begin_count_oc_counted', None)
+        session.pop('begin_count_oc_filename', None)
+        session.modified = True
+
     # Step 4: rebuild variance rows from session if OC count report already uploaded
     oc_uploaded = 'begin_count_oc_counted' in session
     oc_filename = session.get('begin_count_oc_filename', '')
@@ -1009,14 +1065,23 @@ def studio_tutorial():
         desc_map = {item['sku'].upper(): item['description'] for item in assigned_skus}
         for sku in sorted(oc_counted.keys()):
             desc = desc_map.get(sku.upper(), '') or master.get(sku.upper(), '') or sku
-            counted = oc_counted[sku]
+            dept_counts = oc_counted[sku] if isinstance(oc_counted[sku], dict) else {}
+            acc   = dept_counts.get('accessory', 0)
+            bins  = dept_counts.get('bins_backstock', 0)
+            dcr   = dept_counts.get('dcr_piercing', 0)
+            vis   = dept_counts.get('visual_display', 0)
+            total_counted = acc + bins + dcr + vis
             bp_val = bp_onhand.get(sku) if bp_onhand else None
-            variance = (counted - bp_val) if bp_val is not None else None
+            variance = (total_counted - bp_val) if bp_val is not None else None
             variance_rows.append({
                 'sku': sku,
                 'description': desc,
                 'bp_onhand': bp_val,
-                'counted': counted,
+                'accessory': acc,
+                'bins_backstock': bins,
+                'dcr_piercing': dcr,
+                'visual_display': vis,
+                'total_counted': total_counted,
                 'variance': variance,
             })
         oc_matched_rows = len(variance_rows)
@@ -1034,7 +1099,12 @@ def studio_tutorial():
         for sku in sorted(bp_verify_raw.keys()):
             product_name = desc_map7.get(sku.upper(), '') or master.get(sku.upper(), '') or sku
             new_on_hand = bp_verify_raw[sku]
-            final_counted = oc_counted_s7.get(sku, 0)
+            _s7_val = oc_counted_s7.get(sku, 0)
+            # Aggregate from nested dept dict; fall back gracefully for old flat shape
+            if isinstance(_s7_val, dict):
+                final_counted = sum(_s7_val.values())
+            else:
+                final_counted = int(_s7_val) if _s7_val else 0
             match = (new_on_hand == final_counted)
             crosscheck_rows.append({
                 'sku': sku,
@@ -1252,23 +1322,42 @@ def studio_tutorial_upload_oc():
                 counted_col = candidate
                 break
 
+        # Detect Department Desc column (required for per-department counts)
+        dept_col = None
+        for candidate in ['department desc', 'department description', 'dept desc',
+                          'department name', 'department']:
+            if candidate in headers:
+                dept_col = candidate
+                break
+
         if sku_col is None:
             return jsonify({'ok': False, 'error': 'No SKU column found. Expected one of: SKU, Product SKU, Product Code, Item SKU, Code.'}), 400
         if counted_col is None:
             return jsonify({'ok': False, 'error': 'No count column found. Expected one of: Counted Units, Counted, Count, Count Qty, Counted Quantity, Quantity, Qty.'}), 400
+        if dept_col is None:
+            return jsonify({'ok': False, 'error': 'No Department Desc column found. Expected "Department Desc" in the OmniCounts Count Report.'}), 400
 
-        # Sum counts by SKU (multiple rows per SKU are summed)
-        raw_counts = {}
+        # Aggregate counts by (SKU, department_key) across all rows
+        _empty_depts = lambda: {'accessory': 0, 'bins_backstock': 0, 'dcr_piercing': 0, 'visual_display': 0}
+        raw_counts = {}  # {sku_upper: {dept_key: int}}
         for row in reader:
             sku = (row.get(sku_col) or '').strip().upper()
+            dept_raw = (row.get(dept_col) or '').strip()
             qty_str = (row.get(counted_col) or '').strip()
             if not sku or is_excluded_sku(sku):
+                continue
+            dept_key = map_department_desc(dept_raw)
+            if dept_key is None:
+                print(f'[upload-oc] unknown Department Desc: {dept_raw!r} — skipping row',
+                      file=sys.stderr)
                 continue
             try:
                 qty = int(float(qty_str))
             except (ValueError, TypeError):
                 qty = 0
-            raw_counts[sku] = raw_counts.get(sku, 0) + qty
+            if sku not in raw_counts:
+                raw_counts[sku] = _empty_depts()
+            raw_counts[sku][dept_key] += qty
 
         # Load assigned SKU list to filter results
         scan = scan_input_files()
@@ -1285,47 +1374,56 @@ def studio_tutorial_upload_oc():
 
         master = load_master_skus()
 
-        # Build counted dict filtered to assigned SKUs (default 0 for missing)
+        # Build nested counted dict filtered to assigned SKUs (default all-zero for missing)
         oc_counted = {}
         for sku in sorted(assigned_set):
-            oc_counted[sku] = raw_counts.get(sku, 0)
+            oc_counted[sku] = raw_counts.get(sku, _empty_depts())
 
         session['begin_count_oc_counted'] = oc_counted
         session['begin_count_oc_filename'] = filename
         session.modified = True
 
         # Analytics: record OC filename, total variances, and per-SKU rows.
+        # DB receives the aggregated total (sum of 4 depts) — schema unchanged.
         # Errors are swallowed — must not affect the user's flow.
         try:
             _run_id = session.get('begin_count_run_id')
             _bp_onhand = session.get('begin_count_bp_onhand', {})
-            _total_variances = sum(
-                1 for sku, cnt in oc_counted.items()
-                if _bp_onhand.get(sku) is not None and cnt != _bp_onhand[sku]
-            )
+            _sku_data = []
+            _total_variances = 0
+            for sku, dept_counts in oc_counted.items():
+                agg = sum(dept_counts.values())
+                _sku_data.append({'sku': sku, 'on_hand': _bp_onhand.get(sku), 'counted': agg})
+                if _bp_onhand.get(sku) is not None and agg != _bp_onhand[sku]:
+                    _total_variances += 1
             update_stock_check_row(_run_id, oc_filename=filename, total_variances=_total_variances)
-            _sku_data = [
-                {'sku': sku, 'on_hand': _bp_onhand.get(sku), 'counted': cnt}
-                for sku, cnt in oc_counted.items()
-            ]
             replace_stock_check_skus(_run_id, _sku_data)
             bump_furthest_step(_run_id, 4)
         except Exception as _exc:
             print(f'[analytics] upload-oc update failed: {_exc}', file=sys.stderr)
 
-        # Build variance rows for the response
+        # Build variance rows for the response (includes per-dept breakdown)
         bp_onhand = session.get('begin_count_bp_onhand', {})
         variance_rows = []
         for sku in sorted(oc_counted.keys()):
             desc = master.get(sku, '') or assigned_names.get(sku, '') or sku
-            counted = oc_counted[sku]
+            dept_counts = oc_counted[sku]
+            acc   = dept_counts.get('accessory', 0)
+            bins  = dept_counts.get('bins_backstock', 0)
+            dcr   = dept_counts.get('dcr_piercing', 0)
+            vis   = dept_counts.get('visual_display', 0)
+            total_counted = acc + bins + dcr + vis
             bp_val = bp_onhand.get(sku) if bp_onhand else None
-            variance = (counted - bp_val) if bp_val is not None else None
+            variance = (total_counted - bp_val) if bp_val is not None else None
             variance_rows.append({
                 'sku': sku,
                 'description': desc,
                 'bp_onhand': bp_val,
-                'counted': counted,
+                'accessory': acc,
+                'bins_backstock': bins,
+                'dcr_piercing': dcr,
+                'visual_display': vis,
+                'total_counted': total_counted,
                 'variance': variance,
             })
 
@@ -1342,39 +1440,58 @@ def studio_tutorial_upload_oc():
 @app.route('/studio/tutorial/variance/update', methods=['POST'])
 @studio_login_required
 def studio_tutorial_variance_update():
-    """Update a single SKU's counted quantity in the session (Step 4 editable table)."""
+    """Update a single SKU's per-department count in the session (Step 4 editable table).
+
+    Request JSON: {sku, department, counted}
+    department must be one of: accessory, bins_backstock, dcr_piercing, visual_display.
+    DB receives the aggregated total (sum of 4 depts) — schema unchanged.
+    """
     data = request.get_json()
     if not data:
         return jsonify({'ok': False, 'error': 'No data'}), 400
     sku = (data.get('sku') or '').strip().upper()
-    qty = data.get('qty')
+    department = (data.get('department') or '').strip().lower()
+    counted = data.get('counted')
     if not sku:
         return jsonify({'ok': False, 'error': 'Missing SKU'}), 400
-    if qty is None:
-        return jsonify({'ok': False, 'error': 'Missing qty'}), 400
+    if department not in DEPARTMENT_KEYS:
+        return jsonify({'ok': False, 'error': f'Invalid department: {department!r}'}), 400
+    if counted is None:
+        return jsonify({'ok': False, 'error': 'Missing counted'}), 400
     try:
-        qty = int(qty)
+        counted = int(counted)
+        if counted < 0:
+            raise ValueError
     except (ValueError, TypeError):
-        return jsonify({'ok': False, 'error': 'qty must be an integer'}), 400
+        return jsonify({'ok': False, 'error': 'counted must be a non-negative integer'}), 400
 
     # Reassign to ensure Flask detects the mutation
     oc_counted = dict(session.get('begin_count_oc_counted', {}))
-    oc_counted[sku] = qty
+    existing = oc_counted.get(sku)
+    if isinstance(existing, dict):
+        dept_counts = dict(existing)
+    else:
+        dept_counts = {'accessory': 0, 'bins_backstock': 0, 'dcr_piercing': 0, 'visual_display': 0}
+    dept_counts[department] = counted
+    oc_counted[sku] = dept_counts
     session['begin_count_oc_counted'] = oc_counted
     session.modified = True
 
-    # Analytics: persist the updated SKU count to the DB row.
+    # Recompute aggregate for DB write (schema stores aggregate only)
+    aggregated = sum(dept_counts.values())
+
+    # Analytics: persist the updated aggregated count to the DB row.
     try:
         _run_id = session.get('begin_count_run_id')
-        update_stock_check_sku_counted(_run_id, sku, qty)
+        update_stock_check_sku_counted(_run_id, sku, aggregated)
     except Exception as _exc:
         print(f'[analytics] variance-update sku write failed: {_exc}', file=sys.stderr)
 
     bp_onhand = session.get('begin_count_bp_onhand', {})
     bp_val = bp_onhand.get(sku) if bp_onhand else None
-    variance = (qty - bp_val) if bp_val is not None else None
+    variance = (aggregated - bp_val) if bp_val is not None else None
 
-    return jsonify({'ok': True, 'sku': sku, 'qty': qty, 'variance': variance})
+    return jsonify({'ok': True, 'sku': sku, 'total_counted': aggregated, 'variance': variance})
 
 
 @app.route('/studio/tutorial/upload-bp-verify', methods=['POST'])
@@ -1470,7 +1587,12 @@ def studio_tutorial_upload_bp_verify():
         for sku in sorted(assigned_set):
             product_name = master.get(sku, '') or assigned_names.get(sku, '') or sku
             new_on_hand = bp_verify[sku]
-            final_counted = oc_counted.get(sku, 0)
+            _oc_val = oc_counted.get(sku, 0)
+            # Aggregate from nested dept dict; fall back gracefully for old flat shape
+            if isinstance(_oc_val, dict):
+                final_counted = sum(_oc_val.values())
+            else:
+                final_counted = int(_oc_val) if _oc_val else 0
             match = (new_on_hand == final_counted)
             crosscheck_rows.append({
                 'sku': sku,

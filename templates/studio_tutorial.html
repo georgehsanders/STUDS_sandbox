@@ -180,6 +180,10 @@
             border-radius: 0;
         }
         .step4-counted-input:focus { border-color: #000; outline: none; }
+        /* Department columns only hold small integers — narrow inputs */
+        .step4-dept-input { width: 60px; }
+        /* Total Counted cell: right-aligned, plain text */
+        .step4-total-counted { text-align: right; font-variant-numeric: tabular-nums; }
         .step4-var-pos  { color: #2d6930; font-weight: 600; }
         .step4-var-neg  { color: #c23030; font-weight: 600; }
         .step4-var-zero { color: #999; }
@@ -606,8 +610,12 @@
                             <tr>
                                 <th>SKU</th>
                                 <th>Description</th>
-                                <th>BP On Hand</th>
-                                <th>Counted</th>
+                                <th style="text-align:right;">BP On Hand</th>
+                                <th>Accessory</th>
+                                <th>Bins &amp; Backstock</th>
+                                <th>DCR/Piercing Room</th>
+                                <th>Visual Display</th>
+                                <th style="text-align:right;">Total Counted</th>
                                 <th>Variance</th>
                             </tr>
                         </thead>
@@ -1039,45 +1047,79 @@
             var html = '';
             rows.forEach(function(row) {
                 var bpText = (row.bp_onhand === null || row.bp_onhand === undefined) ? '\u2014' : row.bp_onhand;
+                var bpAttr = (row.bp_onhand !== null && row.bp_onhand !== undefined) ? row.bp_onhand : '';
+                var acc  = (row.accessory      || 0);
+                var bins = (row.bins_backstock  || 0);
+                var dcr  = (row.dcr_piercing    || 0);
+                var vis  = (row.visual_display  || 0);
+                var total = (row.total_counted !== undefined) ? row.total_counted : (acc + bins + dcr + vis);
                 var variance = row.variance;
+                if (variance === null || variance === undefined) {
+                    variance = (bpAttr !== '') ? (total - parseInt(bpAttr, 10)) : null;
+                }
                 var varText, varClass;
                 if (variance === null || variance === undefined) {
-                    varText = '\u2014';
-                    varClass = '';
+                    varText = '\u2014'; varClass = '';
                 } else if (variance > 0) {
-                    varText = '+' + variance;
-                    varClass = 'step4-var-pos';
+                    varText = '+' + variance; varClass = 'step4-var-pos';
                 } else if (variance < 0) {
-                    varText = String(variance);
-                    varClass = 'step4-var-neg';
+                    varText = String(variance); varClass = 'step4-var-neg';
                 } else {
-                    varText = '0';
-                    varClass = 'step4-var-zero';
+                    varText = '0'; varClass = 'step4-var-zero';
                 }
-                var bpAttr = (row.bp_onhand !== null && row.bp_onhand !== undefined) ? row.bp_onhand : '';
+                var skuEsc = escHtml4(row.sku);
+                function mkDeptInput(dept, val) {
+                    return '<input type="number" class="step4-counted-input step4-dept-input"'
+                        + ' value="' + val + '"'
+                        + ' data-sku="' + skuEsc + '"'
+                        + ' data-dept="' + dept + '"'
+                        + ' data-bp="' + bpAttr + '"'
+                        + ' min="0" step="1"'
+                        + ' oninput="onDeptInputChange(this)"'
+                        + ' onchange="onDeptInputChange(this)">';
+                }
                 html += '<tr>'
-                    + '<td><strong>' + escHtml4(row.sku) + '</strong></td>'
+                    + '<td><strong>' + skuEsc + '</strong></td>'
                     + '<td>' + escHtml4(row.description) + '</td>'
-                    + '<td>' + bpText + '</td>'
-                    + '<td><input type="number" class="step4-counted-input"'
-                    +     ' value="' + row.counted + '"'
-                    +     ' data-sku="' + escHtml4(row.sku) + '"'
-                    +     ' data-bp="' + bpAttr + '"'
-                    +     ' oninput="onCountedChange(this)"'
-                    +     ' onchange="onCountedChange(this)"></td>'
-                    + '<td class="' + varClass + '" id="var-cell-' + escHtml4(row.sku) + '">' + varText + '</td>'
+                    + '<td style="text-align:right;">' + bpText + '</td>'
+                    + '<td>' + mkDeptInput('accessory',      acc)  + '</td>'
+                    + '<td>' + mkDeptInput('bins_backstock',  bins) + '</td>'
+                    + '<td>' + mkDeptInput('dcr_piercing',    dcr)  + '</td>'
+                    + '<td>' + mkDeptInput('visual_display',  vis)  + '</td>'
+                    + '<td class="step4-total-counted" id="total-cell-' + skuEsc + '">' + total + '</td>'
+                    + '<td class="' + varClass + '" id="var-cell-' + skuEsc + '">' + varText + '</td>'
                     + '</tr>';
             });
             tbody.innerHTML = html;
         }
 
-        function onCountedChange(input) {
-            var sku = input.getAttribute('data-sku');
+        // Handles edits to any of the four per-department inputs in the variance table.
+        // Recomputes Total Counted and Variance live; debounces a POST to variance/update.
+        function onDeptInputChange(input) {
+            var sku  = input.getAttribute('data-sku');
+            var dept = input.getAttribute('data-dept');
             var bpRaw = input.getAttribute('data-bp');
-            var counted = parseInt(input.value, 10);
-            if (isNaN(counted)) counted = 0;
+            var newVal = parseInt(input.value, 10);
+            if (isNaN(newVal) || newVal < 0) {
+                newVal = 0;
+                input.value = 0;
+            }
 
-            // Update variance cell immediately
+            // Sum all 4 dept inputs in this row to get new Total Counted
+            var tr = input.closest('tr');
+            var total = 0;
+            if (tr) {
+                var deptInputs = tr.querySelectorAll('.step4-dept-input');
+                deptInputs.forEach(function(inp) { total += (parseInt(inp.value, 10) || 0); });
+            } else {
+                total = newVal; // fallback: row not found
+            }
+
+            // Update Total Counted cell
+            var totalCell = document.getElementById('total-cell-' + sku);
+            if (totalCell) totalCell.textContent = total;
+
+            // Update Variance cell
             var varCell = document.getElementById('var-cell-' + sku);
             if (varCell) {
                 if (bpRaw === '' || bpRaw === null || bpRaw === undefined) {
@@ -1085,7 +1127,7 @@
                     varCell.className = '';
                 } else {
                     var bp = parseInt(bpRaw, 10);
-                    var variance = counted - bp;
+                    var variance = total - bp;
                     if (variance > 0) {
                         varCell.textContent = '+' + variance;
                         varCell.className = 'step4-var-pos';
@@ -1099,13 +1141,13 @@
                 }
             }
 
-            // Debounce persist to session
+            // Debounce persist to session — POSTs per-department, server aggregates for DB
             clearTimeout(input._saveTimer);
             input._saveTimer = setTimeout(function() {
                 fetch('/studio/tutorial/variance/update', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({sku: sku, qty: counted}),
+                    body: JSON.stringify({sku: sku, department: dept, counted: newVal}),
                 }).catch(function(err) {
                     console.error('Failed to persist variance edit:', err);
                 });
