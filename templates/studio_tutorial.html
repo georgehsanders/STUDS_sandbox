@@ -289,6 +289,50 @@
         .step7-summary-value-green { font-weight: 600; color: #2d6930; text-align: right; }
         .step7-summary-value-red   { font-weight: 600; color: #c23030; text-align: right; }
 
+        /* ---- Warning interstitial ---- */
+        .warning-box {
+            background: #fef3c7;
+            border: 1.5px solid #d97706;
+            color: #78350f;
+            padding: 20px 24px;
+            margin: 0 0 28px 0;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        .warning-confirm-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 24px;
+            height: auto;
+            white-space: normal;
+            border: 1.5px solid #000;
+            border-radius: 0;
+            background: #e8b4f8;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: 400;
+            letter-spacing: 0.04em;
+            color: #000;
+            cursor: pointer;
+            margin-top: 8px;
+            margin-bottom: 18px;
+            max-width: 560px;
+            text-align: left;
+            line-height: 1.5;
+        }
+        .warning-confirm-btn:hover { background: #d9a0ec; }
+        .warning-back-link {
+            display: inline-block;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #666;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .warning-back-link:hover { color: #000; }
+
         /* ---- Intro: counter name field ---- */
         #intro-counter-name {
             width: 100%;
@@ -431,6 +475,17 @@
                 <li><input type="checkbox"><span>No jewelry is sitting in your DCR, Midmarks, or in the Reprocessing Bins.</span></li>
             </ul>
             <button class="studio-tutorial-btn" id="intro-begin-btn" onclick="beginStockCheck()" disabled style="opacity:0.4;cursor:not-allowed;">I'm ready to begin the Stock Check Process.</button>
+        </div>
+
+        <!-- WARNING SCREEN -->
+        <div class="studio-tutorial-step" id="step-warning">
+            <h2 class="studio-tutorial-heading">Before You Begin</h2>
+            <div class="warning-box">
+                <strong>! WARNING !</strong> All unprocessed damages <strong>MUST</strong> be adjusted in Brightpearl prior to proceeding to the next step or your Stock Check counts will be inaccurate.
+            </div>
+            <button class="warning-confirm-btn" onclick="confirmWarning()">I confirm that I understand and have made all necessary damage adjustments in Brightpearl. I'm ready to continue my Weekly Stock Check.</button>
+            <br>
+            <a class="warning-back-link" onclick="backToIntro()">&#8592; Back</a>
         </div>
 
         <!-- STEP 1 -->
@@ -1023,7 +1078,7 @@
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 if (data.ok) {
-                    goToStep('step-1');
+                    goToWarning();
                 } else {
                     if (errEl) {
                         errEl.textContent = data.error || "Couldn\u2019t save your name \u2014 please try again.";
@@ -1039,6 +1094,31 @@
                 }
                 if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
             });
+        }
+
+        // ---- Warning interstitial navigation ----
+        // goToWarning: show the warning screen without triggering saveStep.
+        // currentClientStep stays 0; step indicator stays hidden.
+        function goToWarning() {
+            var steps = document.querySelectorAll('.studio-tutorial-step');
+            for (var i = 0; i < steps.length; i++) steps[i].classList.remove('studio-tutorial-active');
+            document.getElementById('step-warning').classList.add('studio-tutorial-active');
+            window.scrollTo(0, 0);
+        }
+
+        // confirmWarning: user acknowledged — now trigger the real Step 1 transition
+        // (creates DB row, starts timer via saveStep(1)).
+        function confirmWarning() {
+            goToStep('step-1');
+        }
+
+        // backToIntro: return to intro without any step side-effects.
+        function backToIntro() {
+            var steps = document.querySelectorAll('.studio-tutorial-step');
+            for (var i = 0; i < steps.length; i++) steps[i].classList.remove('studio-tutorial-active');
+            document.getElementById('step-intro').classList.add('studio-tutorial-active');
+            window.scrollTo(0, 0);
+            onCounterNameInput(); // re-evaluate button gate in case name is still filled
         }
 
         // ---- Step indicator ----
