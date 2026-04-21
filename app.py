@@ -597,6 +597,40 @@ def studio_tutorial():
             })
         oc_matched_rows = len(variance_rows)
 
+    # Step 7: rebuild crosscheck rows if verify upload already done this session
+    bp_verify_raw = session.get('begin_count_bp_verify_onhand', {})
+    bp_verify_uploaded = bool(bp_verify_raw)
+    bp_verify_filename = session.get('begin_count_bp_verify_filename', '')
+    bp_verify_matched_rows = sum(1 for v in bp_verify_raw.values() if v != 0) if bp_verify_uploaded else 0
+    crosscheck_rows = []
+    summary = None
+    if bp_verify_uploaded:
+        oc_counted_s7 = session.get('begin_count_oc_counted', {})
+        desc_map7 = {item['sku'].upper(): item['description'] for item in assigned_skus}
+        for sku in sorted(bp_verify_raw.keys()):
+            product_name = desc_map7.get(sku.upper(), '') or master.get(sku.upper(), '') or sku
+            new_on_hand = bp_verify_raw[sku]
+            final_counted = oc_counted_s7.get(sku, 0)
+            match = (new_on_hand == final_counted)
+            crosscheck_rows.append({
+                'sku': sku,
+                'product_name': product_name,
+                'new_on_hand': new_on_hand,
+                'final_counted': final_counted,
+                'match': match,
+            })
+        total_s7 = len(crosscheck_rows)
+        reconciled_s7 = sum(1 for r in crosscheck_rows if r['match'])
+        summary = {
+            'total_skus': total_s7,
+            'reconciled': reconciled_s7,
+            'still_off': total_s7 - reconciled_s7,
+            'bp_filename': session.get('begin_count_bp_filename', ''),
+            'oc_filename': session.get('begin_count_oc_filename', ''),
+            'bp_verify_filename': bp_verify_filename,
+            'completed_at': '',  # not recorded on resume
+        }
+
     return render_template('studio_tutorial.html',
                            current_step=current_step,
                            current_store_id=current_store_id,
@@ -609,7 +643,12 @@ def studio_tutorial():
                            oc_filename=oc_filename,
                            oc_matched_rows=oc_matched_rows,
                            variance_rows=variance_rows,
-                           has_bp=bp_upload_done)
+                           has_bp=bp_upload_done,
+                           bp_verify_uploaded=bp_verify_uploaded,
+                           bp_verify_filename=bp_verify_filename,
+                           bp_verify_matched_rows=bp_verify_matched_rows,
+                           crosscheck_rows=crosscheck_rows,
+                           summary=summary)
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])
@@ -808,6 +847,135 @@ def studio_tutorial_variance_update():
     variance = (qty - bp_val) if bp_val is not None else None
 
     return jsonify({'ok': True, 'sku': sku, 'qty': qty, 'variance': variance})
+
+
+@app.route('/studio/tutorial/upload-bp-verify', methods=['POST'])
+@studio_login_required
+def studio_tutorial_upload_bp_verify():
+    """Accept a fresh post-adjustment Brightpearl Inventory Summary CSV for Step 7.
+    Crosschecks the new on-hand values against the final Step 4 counts stored in session.
+    Stores results in session['begin_count_bp_verify_onhand'] and
+    session['begin_count_bp_verify_filename']. Never touches begin_count_bp_onhand or
+    begin_count_oc_counted — those are read-only from this route's perspective."""
+
+    # Guard: Step 4 data must exist before Step 7 can run
+    oc_counted = session.get('begin_count_oc_counted', {})
+    if not oc_counted:
+        return jsonify({'ok': False, 'error': 'Please complete Step 4 before verifying adjustments.'}), 400
+
+    f = request.files.get('bp_verify_file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+
+    try:
+        filename = f.filename
+        raw_bytes = f.read()
+        text = clean_csv_content(raw_bytes)
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            return jsonify({'ok': False, 'error': 'Could not read file headers'}), 400
+        headers = [h.strip().lower() for h in reader.fieldnames]
+        reader.fieldnames = headers
+
+        # Same column-detection logic as /upload-bp
+        sku_col = None
+        qty_col = None
+        for h in headers:
+            if h == 'sku' and sku_col is None:
+                sku_col = h
+        for h in headers:
+            if ('on hand' in h or 'onhand' in h or 'on-hand' in h) and qty_col is None:
+                qty_col = h
+        if qty_col is None:
+            for h in headers:
+                if 'quantity' in h and qty_col is None:
+                    qty_col = h
+
+        if sku_col is None:
+            return jsonify({'ok': False, 'error': 'No SKU column found in uploaded file'}), 400
+        if qty_col is None:
+            return jsonify({'ok': False, 'error': 'No on-hand quantity column found. Expected a column containing "on hand" or "quantity".'}), 400
+
+        # Parse raw on-hand values from file
+        raw_bp = {}
+        for row in reader:
+            sku = (row.get(sku_col) or '').strip().upper()
+            qty_str = (row.get(qty_col) or '').strip()
+            if not sku or is_excluded_sku(sku):
+                continue
+            try:
+                qty = int(float(qty_str))
+            except (ValueError, TypeError):
+                qty = 0
+            raw_bp[sku] = qty
+
+        # Load assigned SKUs for this week
+        scan = scan_input_files()
+        assigned_set = set()
+        assigned_names = {}
+        if scan['sku_lists']:
+            skulist_path = os.path.join(INPUT_DIR, scan['sku_lists'][0][0])
+            for row in parse_csv(skulist_path):
+                sku = row.get('sku', '').strip().upper()
+                name = row.get('product name', '').strip()
+                if sku and not is_excluded_sku(sku):
+                    assigned_set.add(sku)
+                    assigned_names[sku] = name
+
+        master = load_master_skus()
+
+        # Build verify dict: all assigned SKUs, default 0 if missing from file
+        bp_verify = {}
+        for sku in sorted(assigned_set):
+            bp_verify[sku] = raw_bp.get(sku, 0)
+
+        # Count how many assigned SKUs were actually present in the uploaded file
+        matched_rows = sum(1 for sku in assigned_set if sku in raw_bp)
+
+        # Persist to session (read-only for begin_count_bp_onhand / begin_count_oc_counted)
+        session['begin_count_bp_verify_onhand'] = bp_verify
+        session['begin_count_bp_verify_filename'] = filename
+        session.modified = True
+
+        # Build crosscheck rows
+        crosscheck_rows = []
+        for sku in sorted(assigned_set):
+            product_name = master.get(sku, '') or assigned_names.get(sku, '') or sku
+            new_on_hand = bp_verify[sku]
+            final_counted = oc_counted.get(sku, 0)
+            match = (new_on_hand == final_counted)
+            crosscheck_rows.append({
+                'sku': sku,
+                'product_name': product_name,
+                'new_on_hand': new_on_hand,
+                'final_counted': final_counted,
+                'match': match,
+            })
+
+        total_skus = len(crosscheck_rows)
+        reconciled = sum(1 for r in crosscheck_rows if r['match'])
+        still_off = total_skus - reconciled
+        completed_at = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+
+        summary = {
+            'total_skus': total_skus,
+            'reconciled': reconciled,
+            'still_off': still_off,
+            'bp_filename': session.get('begin_count_bp_filename', ''),
+            'oc_filename': session.get('begin_count_oc_filename', ''),
+            'bp_verify_filename': filename,
+            'completed_at': completed_at,
+        }
+
+        return jsonify({
+            'ok': True,
+            'filename': filename,
+            'matched_rows': matched_rows,
+            'crosscheck_rows': crosscheck_rows,
+            'summary': summary,
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/studio/omnicounts', methods=['GET', 'POST'])

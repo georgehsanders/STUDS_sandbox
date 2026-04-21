@@ -113,8 +113,8 @@
             color: #2d6930;
             margin-top: 20px;
         }
-        /* Steps 3 and 4 need full width (grids/tables) */
-        #step-3, #step-4 {
+        /* Steps 3, 4, and 7 need full width (grids/tables) */
+        #step-3, #step-4, #step-7 {
             max-width: 100%;
         }
         /* Match studio.html's 3-col breakpoint at 1024px (style.css defaults to 2-col) */
@@ -183,6 +183,100 @@
         .step4-var-pos  { color: #2d6930; font-weight: 600; }
         .step4-var-neg  { color: #c23030; font-weight: 600; }
         .step4-var-zero { color: #999; }
+
+        /* ---- Step 7: crosscheck table ---- */
+        .step7-table-wrap {
+            max-height: 480px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 24px;
+        }
+        .step7-crosscheck-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .step7-crosscheck-table thead th {
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #999;
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1.5px solid #000;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 1;
+        }
+        .step7-crosscheck-table tbody td {
+            padding: 9px 10px;
+            border-bottom: 1px solid #e0e0e0;
+            color: #1a1a1a;
+            vertical-align: middle;
+        }
+        .step7-crosscheck-table tbody tr:hover { background: #fafafa; }
+        .step7-match-ok   { color: #2d6930; font-size: 15px; font-weight: 600; }
+        .step7-match-fail { color: #c23030; font-size: 15px; font-weight: 600; }
+
+        /* ---- Step 7: completion banner ---- */
+        .step7-complete-banner {
+            background: #d4f0d4;
+            border: 1.5px solid #2d6930;
+            padding: 24px 28px;
+            margin: 0 0 24px 0;
+            text-align: center;
+        }
+        .step7-complete-banner-heading {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 22px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            color: #1a4a1a;
+            margin: 0 0 6px 0;
+        }
+        .step7-complete-banner-sub {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            color: #2d6930;
+            margin: 0;
+        }
+
+        /* ---- Step 7: screenshot summary block ---- */
+        .step7-summary {
+            border: 1.5px solid #000;
+            padding: 24px 28px;
+            margin: 0 0 28px 0;
+            background: #fff;
+            max-width: 520px;
+        }
+        .step7-summary-title {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #999;
+            margin: 0 0 16px 0;
+        }
+        .step7-summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #1a1a1a;
+            gap: 16px;
+        }
+        .step7-summary-row:last-child { border-bottom: none; }
+        .step7-summary-label { color: #666; flex-shrink: 0; }
+        .step7-summary-value { font-weight: 500; text-align: right; word-break: break-all; }
+        .step7-summary-value-green { font-weight: 600; color: #2d6930; text-align: right; }
+        .step7-summary-value-red   { font-weight: 600; color: #c23030; text-align: right; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
@@ -382,7 +476,78 @@
         <div class="studio-tutorial-step" id="step-7">
             <h2 class="studio-tutorial-heading">Step 7: Adjustment Verification</h2>
             <p class="studio-tutorial-body">After completing your adjustments in Brightpearl, download a fresh Inventory Summary Report and upload it below. We'll crosscheck it against your reported variances to confirm everything was accurately accounted for.</p>
-            <!-- PHASE 5: Fresh Brightpearl Inventory Summary upload + crosscheck table + "Stock Check complete!" banner + summary + "Back to Dashboard" button go here -->
+            <!-- Section 1: Upload control (reuses Step 4's upload-area class) -->
+            <div id="step7-upload-area" class="step4-upload-area">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <input type="file" id="step7-bp-file" accept=".csv" style="font-size:13px;color:#1a1a1a;flex:1;min-width:0;">
+                    <button onclick="uploadBpVerifyFile()" id="step7-upload-btn" class="studio-tutorial-btn" style="margin-top:0;">Upload</button>
+                </div>
+                <div id="step7-upload-status" style="display:none;margin-top:12px;font-size:13px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;line-height:1.5;"></div>
+            </div>
+
+            <!-- Sections 2–4: hidden until upload succeeds -->
+            <div id="step7-results" style="display:none;">
+
+                <!-- Section 2: Crosscheck table -->
+                <div class="step4-section-heading">Adjustment Crosscheck</div>
+                <div class="step7-table-wrap">
+                    <table class="step7-crosscheck-table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Product Name</th>
+                                <th style="text-align:right;">New On-Hand</th>
+                                <th style="text-align:right;">Final Counted</th>
+                                <th style="text-align:center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="step7-crosscheck-tbody"></tbody>
+                    </table>
+                </div>
+
+                <!-- Section 3: Completion banner -->
+                <div class="step7-complete-banner">
+                    <div class="step7-complete-banner-heading">Stock Check complete!</div>
+                    <p class="step7-complete-banner-sub">All adjustments have been verified. Great work.</p>
+                </div>
+
+                <!-- Section 3 (cont.): Screenshot-able summary -->
+                <div class="step7-summary" id="step7-summary-block">
+                    <div class="step7-summary-title">Stock Check Summary</div>
+                    <div class="step7-summary-row">
+                        <span class="step7-summary-label">Total SKUs checked</span>
+                        <span class="step7-summary-value" id="s7-total">—</span>
+                    </div>
+                    <div class="step7-summary-row">
+                        <span class="step7-summary-label">Variances reconciled</span>
+                        <span class="step7-summary-value-green" id="s7-reconciled">—</span>
+                    </div>
+                    <div class="step7-summary-row">
+                        <span class="step7-summary-label">Variances still off</span>
+                        <span class="step7-summary-value-red" id="s7-still-off">—</span>
+                    </div>
+                    <div class="step7-summary-row" id="s7-row-bp" style="display:none;">
+                        <span class="step7-summary-label">Step 1 — BP upload</span>
+                        <span class="step7-summary-value" id="s7-bp-file">—</span>
+                    </div>
+                    <div class="step7-summary-row" id="s7-row-oc" style="display:none;">
+                        <span class="step7-summary-label">Step 4 — OmniCounts upload</span>
+                        <span class="step7-summary-value" id="s7-oc-file">—</span>
+                    </div>
+                    <div class="step7-summary-row" id="s7-row-verify" style="display:none;">
+                        <span class="step7-summary-label">Step 7 — BP verify upload</span>
+                        <span class="step7-summary-value" id="s7-verify-file">—</span>
+                    </div>
+                    <div class="step7-summary-row" id="s7-row-date" style="display:none;">
+                        <span class="step7-summary-label">Completed</span>
+                        <span class="step7-summary-value" id="s7-completed-at">—</span>
+                    </div>
+                </div>
+
+                <!-- Section 4: Back to Dashboard -->
+                <a href="/studio/" class="studio-tutorial-btn" style="background:#c8f135;text-decoration:none;">Back to Dashboard</a>
+
+            </div>
         </div>
 
     </div>
@@ -397,6 +562,10 @@
         var ocFilenameFromSvr = {{ oc_filename | tojson }};
         var varianceRowsFromSvr = {{ variance_rows | tojson }};
         var hasBp             = {{ has_bp | tojson }};
+        var bpVerifyUploaded    = {{ bp_verify_uploaded | tojson }};
+        var bpVerifyFilenomeSvr = {{ bp_verify_filename | tojson }};
+        var crosscheckRowsSvr   = {{ crosscheck_rows | tojson }};
+        var summarySvr          = {{ summary | tojson }};
 
         var STEP_ID_TO_NUM = {
             'step-intro': 0,
@@ -689,6 +858,100 @@
                 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
+        // ---- Step 7: fresh BP verify upload, crosscheck table, summary ----
+
+        function showStep7Status(type, message) {
+            var el = document.getElementById('step7-upload-status');
+            if (!el) return;
+            el.style.color = type === 'success' ? '#2d6930' : (type === 'error' ? '#c23030' : '#999');
+            el.textContent = message;
+            el.style.display = '';
+        }
+
+        function uploadBpVerifyFile() {
+            var fileInput = document.getElementById('step7-bp-file');
+            var uploadBtn = document.getElementById('step7-upload-btn');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                showStep7Status('error', 'Please select a file first.');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('bp_verify_file', fileInput.files[0]);
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            showStep7Status('loading', 'Uploading\u2026');
+
+            fetch('/studio/tutorial/upload-bp-verify', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+                if (data.ok) {
+                    showStep7Status('success',
+                        '\u2713 ' + data.filename + ' uploaded \u2014 ' + data.matched_rows + ' assigned SKUs matched');
+                    renderCrosscheckTable(data.crosscheck_rows);
+                    populateSummary(data.summary);
+                    document.getElementById('step7-results').style.display = '';
+                } else {
+                    showStep7Status('error', 'Upload failed: ' + (data.error || 'Unknown error.'));
+                }
+            })
+            .catch(function(err) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+                showStep7Status('error', 'Upload failed: ' + err.message);
+            });
+        }
+
+        function renderCrosscheckTable(rows) {
+            var tbody = document.getElementById('step7-crosscheck-tbody');
+            if (!tbody) return;
+            var html = '';
+            rows.forEach(function(row) {
+                var statusHtml = row.match
+                    ? '<span class="step7-match-ok">\u2713</span>'
+                    : '<span class="step7-match-fail">\u2717</span>';
+                html += '<tr>'
+                    + '<td><strong>' + escHtml4(row.sku) + '</strong></td>'
+                    + '<td>' + escHtml4(row.product_name) + '</td>'
+                    + '<td style="text-align:right;">' + row.new_on_hand + '</td>'
+                    + '<td style="text-align:right;">' + row.final_counted + '</td>'
+                    + '<td style="text-align:center;">' + statusHtml + '</td>'
+                    + '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function populateSummary(s) {
+            if (!s) return;
+            var el;
+            el = document.getElementById('s7-total');      if (el) el.textContent = s.total_skus;
+            el = document.getElementById('s7-reconciled'); if (el) el.textContent = s.reconciled;
+            el = document.getElementById('s7-still-off');  if (el) el.textContent = s.still_off;
+            if (s.bp_filename) {
+                el = document.getElementById('s7-bp-file');  if (el) el.textContent = s.bp_filename;
+                el = document.getElementById('s7-row-bp');   if (el) el.style.display = '';
+            }
+            if (s.oc_filename) {
+                el = document.getElementById('s7-oc-file');  if (el) el.textContent = s.oc_filename;
+                el = document.getElementById('s7-row-oc');   if (el) el.style.display = '';
+            }
+            if (s.bp_verify_filename) {
+                el = document.getElementById('s7-verify-file'); if (el) el.textContent = s.bp_verify_filename;
+                el = document.getElementById('s7-row-verify');  if (el) el.style.display = '';
+            }
+            if (s.completed_at) {
+                el = document.getElementById('s7-completed-at'); if (el) el.textContent = s.completed_at;
+                el = document.getElementById('s7-row-date');      if (el) el.style.display = '';
+            }
+        }
+
         // ---- Page load ----
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -759,6 +1022,42 @@
                             document.getElementById('step4-oc-file').files = dt.files;
                         } catch(ex) {}
                         uploadOcFile();
+                    }
+                });
+            }
+
+            // Step 7 resume: restore crosscheck table if verify upload already done
+            if (bpVerifyUploaded && crosscheckRowsSvr && crosscheckRowsSvr.length > 0) {
+                renderCrosscheckTable(crosscheckRowsSvr);
+                populateSummary(summarySvr);
+                document.getElementById('step7-results').style.display = '';
+                if (bpVerifyFilenomeSvr) {
+                    showStep7Status('success',
+                        '\u2713 ' + bpVerifyFilenomeSvr + ' \u2014 already uploaded this session.');
+                }
+            }
+
+            // Step 7 drag-and-drop
+            var step7Area = document.getElementById('step7-upload-area');
+            if (step7Area) {
+                step7Area.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    step7Area.classList.add('drag-over');
+                });
+                step7Area.addEventListener('dragleave', function() {
+                    step7Area.classList.remove('drag-over');
+                });
+                step7Area.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    step7Area.classList.remove('drag-over');
+                    var files = e.dataTransfer.files;
+                    if (files && files[0]) {
+                        try {
+                            var dt = new DataTransfer();
+                            dt.items.add(files[0]);
+                            document.getElementById('step7-bp-file').files = dt.files;
+                        } catch(ex) {}
+                        uploadBpVerifyFile();
                     }
                 });
             }
