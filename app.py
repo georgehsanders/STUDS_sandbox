@@ -1127,6 +1127,33 @@ def studio_tutorial():
             'duration': _resume_duration(session),
         }
 
+    # Step 6: condensed variance table — non-zero rows only, sorted by abs(variance) desc
+    _s6_oc_counted = session.get('begin_count_oc_counted')
+    step6_oc_counted_present = _s6_oc_counted is not None
+    step6_variance_rows = []
+    if step6_oc_counted_present:
+        _s6_bp_onhand = session.get('begin_count_bp_onhand', {})
+        _s6_desc_map = {item['sku'].upper(): item['description'] for item in assigned_skus}
+        for sku in sorted(_s6_oc_counted.keys()):
+            _s6_dept = _s6_oc_counted[sku]
+            if isinstance(_s6_dept, dict):
+                _s6_total = sum(_s6_dept.values())
+            else:
+                _s6_total = int(_s6_dept) if _s6_dept else 0
+            _s6_bp = _s6_bp_onhand.get(sku) or 0
+            _s6_variance = _s6_total - _s6_bp
+            if _s6_variance != 0:
+                desc = _s6_desc_map.get(sku.upper(), '') or master.get(sku.upper(), '') or sku
+                step6_variance_rows.append({
+                    'sku': sku,
+                    'description': desc,
+                    'bp_on_hand': _s6_bp,
+                    'total_counted': _s6_total,
+                    'variance': _s6_variance,
+                })
+        # Sort by abs(variance) descending, ties broken by SKU ascending
+        step6_variance_rows.sort(key=lambda r: (-abs(r['variance']), r['sku']))
+
     # Step indicator: compute completion state per step (1–7)
     _done_map = {
         1: bool(session.get('begin_count_bp_onhand')),
@@ -1166,7 +1193,9 @@ def studio_tutorial():
                            crosscheck_rows=crosscheck_rows,
                            summary=summary,
                            step_status=step_status,
-                           counter_name=session.get('begin_count_counter_name', ''))
+                           counter_name=session.get('begin_count_counter_name', ''),
+                           step6_oc_counted_present=step6_oc_counted_present,
+                           step6_variance_rows=step6_variance_rows)
 
 
 @app.route('/studio/tutorial/step', methods=['POST'])

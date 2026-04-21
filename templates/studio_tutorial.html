@@ -637,8 +637,38 @@
         <!-- STEP 6 -->
         <div class="studio-tutorial-step" id="step-6">
             <h2 class="studio-tutorial-heading">Step 6: Make Your Brightpearl Adjustments</h2>
-            <p class="studio-tutorial-body">Use the variance report from Step 4 to make all necessary adjustments directly in Brightpearl.</p>
-            <p class="studio-tutorial-body">Once all adjustments have been made, come back here and continue to the last step.</p>
+            <p class="studio-tutorial-body">Below are all SKUs you counted today that have some sort of variance. Use the table below to make all necessary adjustments directly in Brightpearl using reason code "stock check".</p>
+            <p class="studio-tutorial-body">Once all adjustments have been made, come back here to continue to the last step.</p>
+            {% if not step6_oc_counted_present %}
+            <p class="studio-tutorial-placeholder">No count data available. Please complete Step 4 first.</p>
+            {% elif step6_variance_rows %}
+            <div class="step7-table-wrap">
+                <table class="step4-variance-table">
+                    <thead>
+                        <tr>
+                            <th style="position:sticky;top:0;background:#fff;z-index:1;">SKU</th>
+                            <th style="position:sticky;top:0;background:#fff;z-index:1;">Description</th>
+                            <th style="position:sticky;top:0;background:#fff;z-index:1;text-align:right;">BP On Hand</th>
+                            <th style="position:sticky;top:0;background:#fff;z-index:1;text-align:right;">Total Counted</th>
+                            <th style="position:sticky;top:0;background:#fff;z-index:1;text-align:right;">Variance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in step6_variance_rows %}
+                        <tr>
+                            <td><strong>{{ row.sku }}</strong></td>
+                            <td>{{ row.description }}</td>
+                            <td style="text-align:right;">{{ row.bp_on_hand }}</td>
+                            <td style="text-align:right;">{{ row.total_counted }}</td>
+                            <td style="text-align:right;" class="{% if row.variance > 0 %}step4-var-pos{% else %}step4-var-neg{% endif %}">{% if row.variance > 0 %}+{{ row.variance }}{% else %}{{ row.variance }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="studio-tutorial-placeholder">No variances to adjust — all counts match Brightpearl's on-hand quantities.</p>
+            {% endif %}
             <button class="studio-tutorial-btn" onclick="goToStep('step-7')">I've done this — onto the last step!</button>
         </div>
 
