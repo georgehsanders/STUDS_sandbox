@@ -44,7 +44,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 
 ---
 
-## HQ Dashboard (`/hq/?section=dashboard`)
+## HQ Portal (`/hq/`)
 
 ### SPA Shell (applies to all HQ sections)
 - [ ] Header displays STUDS logo with "(CONFIDENTIAL)" label
@@ -52,80 +52,20 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Right nav box (lavender): FILES | REFRESH | SETTINGS
 - [ ] User display name shown below header (if logged in as named user)
 - [ ] "UPDATED:" timestamp shown below header, updates on refresh
-- [ ] Section nav bar: DASHBOARD | ANALYTICS | DATABASE | STUDIOS
+
+> **⚠️ Updated in sandbox:** The DASHBOARD tab has been retired. See Sandbox Changes — Dashboard Retirement.
+
+- [ ] Section nav bar: ANALYTICS | DATABASE | STUDIOS
 - [ ] Clicking a section link loads its content via AJAX into the main area without full page reload
 - [ ] Active section link is visually highlighted
 - [ ] Browser back/forward buttons navigate between sections via history.pushState
 - [ ] Direct URL access with `?section=` parameter loads the correct section on page load
+- [ ] Default section on initial page load (no `?section=` param): Analytics
 - [ ] Page scrolls to top when switching sections
-
-### Summary Bar
-- [ ] Displays Total Studios count
-- [ ] Displays Updated count (green)
-- [ ] Displays Discrepancy count (red)
-- [ ] Displays Incomplete count (gray)
-- [ ] Displays current SKU list filename (or dash if none)
-- [ ] Displays SKU count from the loaded list (or dash if none)
-- [ ] Displays audit trail date range as "min -> max" (or dash if no audit trail)
-
-### Bypass Banner
-- [ ] If no SKU list file is present, a warning banner appears: "No SKU list loaded -- reconciling all variance SKUs..."
-- [ ] In bypass mode, all variance SKUs are treated as active (no intersection filter)
-
-### Warnings
-- [ ] Warnings are displayed in a yellow/orange banner area below the summary bar
-- [ ] Warning if multiple SKU lists found (uses most recent by date in filename)
-- [ ] Warning if multiple audit trails found (uses most recent by date in filename)
-- [ ] Warning if a variance file fails to parse
-
-### Filter & Sort Controls
-- [ ] Filter dropdown: All / Updated / Discrepancy Detected / Incomplete
-- [ ] Selecting a filter hides non-matching store rows
-- [ ] Incomplete filter matches both "Incomplete (missing file)" and "Incomplete (unrecognized file format)"
-- [ ] Sort dropdown: Store ID / Status / Discrepancy Count
-- [ ] Store ID sorts numerically ascending
-- [ ] Status sorts: Discrepancy Detected first, then Incomplete, then Updated
-- [ ] Discrepancy Count sorts descending (highest first)
-
-### Action Links
-- [ ] EXPORT CSV link downloads a CSV file of all reconciliation data
-- [ ] ARCHIVE link navigates to the archive browser page
-
-### Store Table
-- [ ] One row per store (all seeded stores always shown — 41 real studios in sandbox; count grows as studios are added — plus any extra variance files)
-- [ ] Columns: expand arrow | Studio name | Status badge | Assigned SKUs | Discrepancies | Net Discrepancy
-- [ ] Status badge colors: Updated (green), Discrepancy Detected (red), Incomplete (gray)
-- [ ] Stores with no variance file show "Incomplete (missing file)"
-- [ ] Stores with unrecognized variance file schema show "Incomplete (unrecognized file format)"
-- [ ] Clicking a store row or its arrow expands/collapses the detail row
-- [ ] Expand arrow rotates from right-pointing to down-pointing when expanded
-- [ ] Column headers are clickable to sort: Studio (string), Status (string), Assigned SKUs (number), Discrepancies (number), Net Discrepancy (number)
-- [ ] Sort indicator arrow (up/down) appears on the active sort column
-- [ ] Clicking the same column header toggles between ascending and descending
-
-### Store Detail Row (Expanded)
-- [ ] Shows a sub-table of SKU-level details
-- [ ] Detail columns: SKU | Product ID | Required Push | Location | Item Cost Price | Actual Push | Discrepancy
-- [ ] Non-zero discrepancy values are visually highlighted
-- [ ] If status is "Discrepancy Detected", a GENERATE EMAIL button appears
-- [ ] If status is "Updated" with no discrepancies, shows "No discrepancies -- all SKUs matched."
-
-### Email Draft Modal
-- [ ] Clicking GENERATE EMAIL fetches draft from `/hq/email-draft/<store_id>` via AJAX
-- [ ] Modal displays: title "Email Draft -- [Store Name]", To field (editable), Subject field (readonly), Body field (readonly textarea)
-- [ ] To field is pre-populated with the store email from settings (if configured)
-- [ ] Subject format: "[Store Name] -- Stock Check Discrepancy"
-- [ ] Body includes greeting, discrepancy explanation, SKU-by-SKU list, and sign-off
-- [ ] Each SKU line shows: SKU, Required Adjustment, Actual Adjustment, Discrepancy
-- [ ] COPY TO CLIPBOARD button copies "To: ... Subject: ... Body: ..." to clipboard
-- [ ] After copying, button text changes to "Copied!" for 2 seconds then reverts
-- [ ] Close button (X) closes the modal
-- [ ] Clicking outside the modal content closes it
 
 ### Refresh
 - [ ] REFRESH button in header sends POST to `/hq/refresh`
 - [ ] On success, updates the "UPDATED:" timestamp in the header
-- [ ] If currently on dashboard section, reloads the dashboard content
 - [ ] On failure, shows an alert with the error
 
 ### Export CSV (`/hq/export`)
@@ -134,54 +74,82 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Includes all SKU detail rows for stores that have variance data
 - [ ] Stores without data get a single row with empty SKU fields
 
+### Dashboard (Retired)
+
+> **⚠️ Retired in sandbox.** The old Dashboard tab and its fragment (`templates/fragments/dashboard.html`) have been deleted. `GET /hq/section/dashboard` now redirects to `/hq/section/analytics`. Bookmarked or cached links to the dashboard gracefully land on Analytics. See Sandbox Changes — Dashboard Retirement for full detail.
+>
+> The following features existed in the old Dashboard and are **no longer present**:
+
+- ~~Summary bar (Total Studios / Updated / Discrepancy / Incomplete / SKU filename / SKU count / audit date range)~~
+- ~~Bypass banner (no SKU list loaded warning)~~
+- ~~Reconciliation warnings~~
+- ~~Filter (All/Updated/Discrepancy/Incomplete) and Sort (Store ID/Status/Discrepancy Count) controls~~
+- ~~EXPORT CSV and ARCHIVE action links~~
+- ~~Per-store reconciliation table with expand/collapse detail rows~~
+- ~~SKU-level detail rows with Required Push / Actual Push / Discrepancy~~
+- ~~GENERATE EMAIL button and Email Draft modal~~
+- ~~Dashboard reload on REFRESH~~
+
 ---
 
 ## HQ Analytics (`/hq/?section=analytics`)
 
+> **⚠️ Replaced in sandbox.** The old analytics section (fake data, 6 scroll-anchored pseudo-tabs) was deleted and replaced with a real 3-tab analytics UI backed by the `stock_checks` / `stock_check_skus` tables. This is now the default landing section after HQ login. See Sandbox Changes — HQ Analytics Replacement for full detail.
+
 ### Sub-Navigation
-- [ ] Sticky sub-nav bar with links: OVERVIEW | COMPLIANCE TREND | STORE RANKINGS | DISCREPANCY SKUS | DISTRIBUTION | STORE GROUPS
-- [ ] Sub-nav becomes fixed to top of viewport when scrolled past its natural position (JS-based sticky since CSS sticky doesn't work in SPA content div)
-- [ ] Clicking a sub-nav link smooth-scrolls to the corresponding panel
-- [ ] Scroll offset accounts for the fixed header height and sub-nav height
+- [ ] Sticky sub-nav bar with three tab links: OVERVIEW | PARTICIPATION | LEADERBOARD
+- [ ] Sub-nav hoisted into the sticky header on section load (via `loadSection()` in `hq_shell.html`)
+- [ ] Active tab is underlined; inactive tabs are not
+- [ ] Clicking a tab link switches the content area without reloading the section
+- [ ] Right side of sub-nav: RANGE label + dropdown selector (Last 4 weeks / Last 12 weeks / All time; default: Last 4 weeks)
+- [ ] Range selection is shared across all three tabs
+- [ ] Changing the range clears the client-side cache and refetches the current tab
 
-### Network Summary Panel (OVERVIEW)
-- [ ] Displays Network Compliance rate as a percentage
-- [ ] Displays Average Update Lag in hours
-- [ ] Displays Total Discrepancy Units
-- [ ] Displays Chronic Offenders count (compliance < 60%) in red, clickable to scroll to Store Groups
-- [ ] Displays Top Performers count (compliance >= 90%) in green, clickable to scroll to Store Groups
+### Data Source
+- [ ] All analytics data is read from `stock_checks` and `stock_check_skus` tables in `store_profiles.db`
+- [ ] No fake or randomly-generated data exists anywhere in the codebase
+- [ ] "Abandoned" status is computed at query time: `status = 'abandoned'` OR (`status = 'in_progress'` AND `started_at < now − 3 days`); the DB column itself is not rewritten
+- [ ] All four analytics API routes require `@hq_login_required`
 
-### 12-Week Compliance Trend (COMPLIANCE TREND)
-- [ ] Stacked bar chart (Chart.js)
-- [ ] X-axis: 12 week labels
-- [ ] Y-axis: count, max 40
-- [ ] Three datasets: Updated (lime), Discrepancy (red), Incomplete (gray)
-- [ ] No animation
-- [ ] Legend at bottom
+### Overview Tab (`GET /hq/analytics/overview?range=`)
+- [ ] Headline: "X of Y studios completed their stock check this week (ZZ%)" — color-coded green (≥80%), amber (60–79%), red (<60%)
+- [ ] Week identifier (MM/DD/YY) shown below headline
+- [ ] Four stat boxes: Avg Completion Time | Variances Found | Variances Reconciled | Variances Still Off
+- [ ] Full-width line chart: "Network-Wide Variance Trend" — two datasets (Variances Found avg per run, Variances Still Off avg per run) across weeks in range
+- [ ] If no data: empty-state message instead of chart and stats
+- [ ] Chart.js 4.x loaded from CDN (`cdn.jsdelivr.net/npm/chart.js@4.4.0`)
 
-### Studio Compliance Leaderboard (STORE RANKINGS)
-- [ ] Sortable table with columns: Rank | Studio | Compliance Rate | Avg Lag | Discrepancy Units | Trend
-- [ ] Top 5 rows visually highlighted (green/top style)
-- [ ] Bottom 5 rows visually highlighted (red/bottom style)
-- [ ] Trend column shows: up arrow + "Improving" (green), down arrow + "Declining" (red), right arrow + "Stable" (gray)
-- [ ] All columns except Trend are sortable by clicking headers
+### Participation Tab (`GET /hq/analytics/participation?range=`)
+- [ ] Sortable table: Studio | Region | This Week | Last 4 Weeks | Runs in Range
+- [ ] This Week column: colored badge — ✓ Completed (green) / ⏳ In Progress (amber) / ⚠ Abandoned (amber) / ✕ Didn't Start (gray)
+- [ ] Last 4 Weeks column: four 12×12 colored squares (green=completed, amber=abandoned/in-progress, gray=didn't start)
+- [ ] Default sort: studios that didn't start this week at top; completed at bottom; secondary sort by store ID ascending
+- [ ] All columns except Last 4 Weeks are sortable by clicking headers
+- [ ] If no data: empty-state message
 
-### Chronic Discrepancy SKUs (DISCREPANCY SKUS)
-- [ ] Sortable table with columns: SKU | Description | Total Units | Studios Affected | Weeks Appearing
-- [ ] All columns are sortable by clicking headers
+### Leaderboard Tab (`GET /hq/analytics/leaderboard?range=`)
+- [ ] Sortable table: Rank | Studio | Region | Score | Completion Rate | Follow-Through | Adjustment Success
+- [ ] Score: composite 0–100, weighted sum of three rates (weights tunable at top of `analytics_begin_count.py`: Completion 40%, Adjustment 35%, Follow-Through 25%)
+- [ ] Completion Rate: `completed weeks / total weeks in range`
+- [ ] Follow-Through: `completed runs / started runs`
+- [ ] Adjustment Success: `variances_reconciled / total_variances` across completed runs
+- [ ] Default sort: Score descending (rank ascending)
+- [ ] All columns sortable; sort is maintained across drill-down open/close
+- [ ] Clicking a row expands an in-place drill-down row below it; clicking again collapses it
+- [ ] Re-sorting the table collapses any open drill-down first
 
-### Discrepancy Size Distribution (DISTRIBUTION)
-- [ ] Bar chart (Chart.js)
-- [ ] X-axis: discrepancy size buckets
-- [ ] Y-axis: store-weeks count
-- [ ] Lavender bar color
-- [ ] No legend
+### Leaderboard Drill-Down (`GET /hq/analytics/studio/<store_id>?range=`)
+- [ ] Fetched on expand; shows "Loading studio details…" placeholder while fetching
+- [ ] Step Funnel: bar chart (Chart.js) with steps 1–7 on X-axis, run-count on Y-axis; callout text names the step with the biggest drop-off
+- [ ] Variance Trend: line chart with two datasets (Variances Found / Variances Still Off per completed run over time)
+- [ ] Recent Runs table: Started | Counter | Status | Duration | Found | Reconciled
+- [ ] If no data in range: "No stock check data in this range for this studio."
+- [ ] Error state: inline retry link
 
-### Studio Groups (STORE GROUPS)
-- [ ] Two-column layout side by side
-- [ ] Left: Chronic Offenders (compliance < 60%) with red heading
-- [ ] Right: Top Performers (compliance >= 90%) with green heading
-- [ ] Each group shows a table: Studio | Compliance Rate | Trend (arrow only)
+### Client-Side Behavior
+- [ ] Client-side cache keyed by `(tab, range)`; cache is invalidated on range change and re-populated on tab switch
+- [ ] Chart instances tracked; previous instance destroyed before re-rendering to prevent "canvas already in use" errors
+- [ ] Chart.js loaded asynchronously; `_whenChart()` polls every 50ms (up to 2s) before giving up — handles CDN load race with IIFE init
 
 ---
 
@@ -200,6 +168,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 
 - [ ] Table with columns: Count (status dot) | Studio | Region
 - [ ] Status dot colors: green (Updated), red (Discrepancy Detected), gray (Incomplete), hollow/unknown (no data)
+- [ ] Status dots are driven by `reconcile.py` / `run_reconciliation()` — same source as the old Dashboard
 - [ ] Studio and Region columns are sortable by clicking headers
 - [ ] Region shows dash (—) if not populated
 - [ ] Clicking a row opens that studio's profile panel
@@ -222,13 +191,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Right column displays: Local Time (in store's timezone), Manager, Email, Phone
 - [ ] Local time updates every 60 seconds while profile is open
 
-### Studio Analytics (within profile)
-- [ ] Compliance Rate percentage
-- [ ] Average Update Lag in hours
-- [ ] Total Discrepancy Units
-- [ ] 12-week sparkline bar chart: lime bars for 0 discrepancies, red bars for >0
-- [ ] Frequently Discrepant SKUs table (if any): SKU | Description | Occurrences
-- [ ] "No analytics data available." shown if no data exists
+> **⚠️ Updated in sandbox:** The Studio Analytics subsection (compliance rate, sparkline bar chart, frequently discrepant SKUs) was removed from the profile panel in Phase 2a of the HQ Analytics replacement. `buildStoreAnalytics()` and `renderSparkline()` were deleted from `hq_shell.html`. The left column now shows reconciliation-derived data only (status dot, assigned SKUs, discrepancy counts from `reconcile.py`).
 
 ### Edit Mode
 - [ ] Clicking EDIT switches the profile to edit mode
@@ -252,7 +215,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Same header layout as SPA shell
 - [ ] FILES link shows as current/active
 - [ ] REFRESH link reloads the page
-- [ ] Section nav links (DASHBOARD, ANALYTICS, DATABASE, STUDIOS) navigate to the SPA
+- [ ] Section nav links (ANALYTICS, DATABASE, STUDIOS) navigate to the SPA
 
 ### Flash Messages
 - [ ] Success messages displayed in green-styled banner
@@ -466,6 +429,8 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 ### Begin Count / Tutorial Page (`/studio/tutorial`)
 
 > **⚠️ Rebuilt in sandbox:** This flow was replaced from a 9-step static instructional tutorial (no persistence, no uploads) with a 7-step functional stock count wizard backed by Flask session storage. See the Sandbox Changes section at the bottom of this document for full detail.
+>
+> **Begin Count is THE stock check workflow for the network.** The old Start Your Stock Check flow remains in the codebase but is deprecated and no longer supported by HQ Analytics.
 
 #### Navigation & Shell
 - [ ] On Studio main page: lime BEGIN COUNT button in content row (right of search bar), navigates to `/studio/tutorial`
@@ -491,6 +456,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Completion flags tracked for steps without upload-based signals: `begin_count_step2_done`, `begin_count_step3_done`, `begin_count_step5_done`, `begin_count_step6_done`
 - [ ] Counter name stored in `session['begin_count_counter_name']`
 - [ ] POST /studio/tutorial/step updates `session['begin_count_step']`; sets done flags on forward advance
+- [ ] Analytics run ID stored in `session['begin_count_run_id']` (integer FK to `stock_checks.id`); cleared on reset
 
 #### Step 1 — Brightpearl Upload
 - [ ] Drag-and-drop or click-to-browse file upload for Brightpearl Inventory Summary CSV
@@ -538,7 +504,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Summary block: Completed by (counter name), Total SKUs checked, Variances reconciled, Variances still off, Step 1 / Step 4 / Step 7 filenames, Completion timestamp, Duration
 - [ ] Duration formatted by `format_duration(seconds)` in app.py: `"<1m"` / `"{n}m"` / `"{h}h {n}m"`
 - [ ] "Back to Dashboard" button returns to `/studio/`
-- [ ] "Start a new Stock Check" secondary button triggers browser confirm dialog then POST /studio/tutorial/reset, which clears all `begin_count_*` session keys and redirects to `/studio/tutorial`
+- [ ] "Start a new Stock Check" secondary button triggers browser confirm dialog then POST /studio/tutorial/reset, which clears all 14 `begin_count_*` session keys and redirects to `/studio/tutorial`
 
 ### OmniCounts Page (`/studio/omnicounts`)
 - [ ] Dedicated page accessible via OMNICOUNTS navlink in the Studio header (lavender button, left of PRINT)
@@ -614,7 +580,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 
 ## Sandbox Changes
 
-> Changes made in the active development session. All items below are scoped to the Begin Count flow (`/studio/tutorial`). The Start Your Stock Check flow (`/studio/stock-check/*`, `templates/stock_check.html`, `stock_check_count.html`, `stock_check_verify.html`) and its session keys (`bp_onhand`, `sc_counts`, `post_bp_onhand`, etc.) were not touched in any phase of this work.
+> Changes made in the active development session. Items are organized by feature area. The Start Your Stock Check flow (`/studio/stock-check/*`, `templates/stock_check.html`, `stock_check_count.html`, `stock_check_verify.html`) and its session keys (`bp_onhand`, `sc_counts`, `post_bp_onhand`, etc.) were not touched in any phase of this work. **This flow is now deprecated** — it is no longer supported by HQ Analytics and should be considered legacy code. Begin Count is the sole active stock check workflow.
 
 ---
 
@@ -634,7 +600,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 | `POST /studio/tutorial/variance/update` | POST | Persists a single-SKU Counted edit to `begin_count_oc_counted`; sets `session.modified = True` |
 | `POST /studio/tutorial/upload-bp-verify` | POST | Parses post-adjustment BP CSV → `begin_count_bp_verify_onhand`, `begin_count_bp_verify_filename`; returns crosscheck_rows + summary JSON (includes counter_name, duration, completed_at) |
 | `POST /studio/tutorial/counter-name` | POST | Validates (1–100 chars, stripped) and stores `begin_count_counter_name` |
-| `POST /studio/tutorial/reset` | POST | Clears all 13 `begin_count_*` session keys; redirects to `/studio/tutorial` |
+| `POST /studio/tutorial/reset` | POST | Clears all 14 `begin_count_*` session keys; redirects to `/studio/tutorial` |
 
 **`GET /studio/tutorial` additions:** builds `step_status` list (completed/current/locked per step), `variance_rows` (rebuilt from `begin_count_bp_onhand` + `begin_count_oc_counted` on every load), `crosscheck_rows` (rebuilt from `begin_count_bp_verify_onhand` + `begin_count_oc_counted` on every load), `summary` dict (counter_name, duration via `_resume_duration`), and `counter_name` for intro field pre-fill.
 
@@ -655,6 +621,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 | `begin_count_step5_done` | bool | POST /tutorial/step | Step 5 completion flag |
 | `begin_count_step6_done` | bool | POST /tutorial/step | Step 6 completion flag |
 | `begin_count_counter_name` | str | POST /tutorial/counter-name | Counter's name from intro screen |
+| `begin_count_run_id` | int | POST /tutorial/step (0→1) | FK to `stock_checks.id`; written by the analytics persistence layer |
 
 **`app.py` helpers added:**
 - `format_duration(seconds)` — returns `"<1m"` / `"{n}m"` / `"{h}h {n}m"`
@@ -691,7 +658,7 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 **What was built:** A "Start a new Stock Check" secondary button on the Step 7 completion screen. Requires browser `confirm()` before firing.
 
 - Route: `POST /studio/tutorial/reset`
-- Clears all 13 `begin_count_*` session keys
+- Clears all 14 `begin_count_*` session keys (including `begin_count_run_id`)
 - Redirects to `/studio/tutorial` (intro screen)
 
 **Files touched:** `app.py`, `templates/studio_tutorial.html`
@@ -835,3 +802,212 @@ Returns `{"ok": true, "store_id": "..."}` on success.
 **Studio login for new studios:** The existing `POST /studio/login` route uses `get_store_by_username(username)` then bcrypt-checks the password. Since `username = store_id` and `password_hash = bcrypt(store_id)`, a newly added studio can immediately log in with their store number as both username and password — no separate credential setup step required.
 
 **Files touched:** `app.py`, `templates/fragments/studios.html`
+
+---
+
+### Stock Check Persistence Layer (Phase 1)
+
+**Summary:** Added two new SQLite tables to `store_profiles.db` and seven write-hook helper functions. Every Begin Count run now creates a persistent record that feeds HQ Analytics. All DB writes are fire-and-forget (wrapped in `try/except`, errors printed to `stderr`, never break the user's flow).
+
+**Files touched:** `app.py`, `analytics_begin_count.py` (new module, Phase 2a)
+
+#### New Tables
+
+**`stock_checks`** — one row per Begin Count run:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `store_id` | TEXT | FK to `stores.store_id` |
+| `counter_name` | TEXT | From intro screen |
+| `skulist_filename` | TEXT | Weekly SKU list filename |
+| `week_identifier` | TEXT | `MM-DD-YY` parsed from SKU list filename |
+| `started_at` | DATETIME | ISO 8601 UTC; set on step 0→1 |
+| `completed_at` | DATETIME | Set on Step 7 upload-bp-verify |
+| `duration_seconds` | INTEGER | Computed from started_at → completed_at |
+| `status` | TEXT | `in_progress` / `completed` / `abandoned` |
+| `furthest_step` | INTEGER | 1–7; bumped on each forward transition |
+| `assigned_sku_count` | INTEGER | Count of SKUs in this run's SKU list |
+| `total_variances` | INTEGER | Count of non-zero variance SKUs (Step 4) |
+| `variances_reconciled` | INTEGER | Count of matched SKUs at Step 7 |
+| `variances_still_off` | INTEGER | Count of unmatched SKUs at Step 7 |
+| `bp_filename` | TEXT | Step 1 upload filename |
+| `oc_filename` | TEXT | Step 4 upload filename |
+| `bp_verify_filename` | TEXT | Step 7 upload filename |
+| `created_at` | DATETIME | `CURRENT_TIMESTAMP` |
+| `updated_at` | DATETIME | Updated on each write |
+
+**`stock_check_skus`** — one row per assigned SKU per run:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `stock_check_id` | INTEGER | FK to `stock_checks.id` |
+| `sku` | TEXT | Uppercase |
+| `on_hand` | INTEGER | From Step 1 BP upload |
+| `counted` | INTEGER | From Step 4 OC upload; updated by variance/update edits |
+| `new_on_hand` | INTEGER | From Step 7 BP-verify upload |
+| `final_counted` | INTEGER | From Step 4 session data at Step 7 finalization |
+| `matched` | BOOLEAN | `1` if new_on_hand == final_counted |
+
+Both tables are created by `init_store_db()` on app startup (idempotent).
+
+#### Helper Functions (all in `app.py`)
+
+| Function | Called from | What it writes |
+|---|---|---|
+| `create_stock_check_row(store_id, counter_name, skulist_filename, week_identifier, started_at)` | POST /tutorial/step (0→1) | INSERTs a new `stock_checks` row with `status='in_progress'`, `furthest_step=1`; returns the new `id` |
+| `update_stock_check_row(run_id, **kwargs)` | Multiple hooks | UPDATEs specific columns; accepts any subset of columns as kwargs |
+| `bump_furthest_step(run_id, step)` | POST /tutorial/step (forward advance), upload-bp-verify | Sets `furthest_step = MAX(current, step)` |
+| `replace_stock_check_skus(run_id, skus_data)` | POST /tutorial/upload-oc | DELETEs all existing SKU rows for this run, then INSERTs fresh rows |
+| `update_stock_check_sku_counted(run_id, sku, counted)` | POST /tutorial/variance/update | UPDATEs a single SKU's `counted` value |
+| `finalize_stock_check_skus(run_id, verify_data)` | POST /tutorial/upload-bp-verify | UPDATEs each SKU row with `new_on_hand`, `final_counted`, `matched` |
+| `mark_stock_check_abandoned(run_id)` | POST /tutorial/reset | Sets `status='abandoned'` WHERE `status != 'completed'` — completed runs are never overwritten |
+
+**`parse_week_identifier(filename)`** helper: extracts the `MM-DD-YY` date from the SKU list filename pattern `SKU_LIST_MM.DD.YY.csv`; returns `None` if no match.
+
+#### Wire-up into Begin Count Routes
+
+| Route | Hook | Effect |
+|---|---|---|
+| POST /tutorial/step (step 0→1) | `create_stock_check_row(...)` | Creates the run row; stores returned `id` as `session['begin_count_run_id']` |
+| POST /tutorial/step (any forward) | `bump_furthest_step(run_id, new_step)` | Advances the furthest_step marker |
+| POST /tutorial/upload-bp | `update_stock_check_row(run_id, bp_filename=..., assigned_sku_count=..., skulist_filename=..., week_identifier=...)` | Records Step 1 metadata |
+| POST /tutorial/upload-oc | `update_stock_check_row(run_id, oc_filename=..., total_variances=...)` + `replace_stock_check_skus(run_id, skus_data)` | Records Step 4 metadata and inserts SKU rows |
+| POST /tutorial/variance/update | `update_stock_check_sku_counted(run_id, sku, qty)` | Persists inline Counted edits to the DB |
+| POST /tutorial/upload-bp-verify | `update_stock_check_row(run_id, bp_verify_filename=..., variances_reconciled=..., variances_still_off=..., completed_at=..., duration_seconds=..., status='completed')` + `finalize_stock_check_skus(run_id, verify_data)` + `bump_furthest_step(run_id, 7)` | Marks run complete; finalizes SKU match data |
+| POST /tutorial/reset | `mark_stock_check_abandoned(run_id)` | Marks run abandoned (no-op if already completed) |
+
+---
+
+### HQ Analytics Replacement (Phases 2a & 2b)
+
+**Summary:** Deleted the old fake-data analytics module and its 6-panel UI; replaced with a real 3-tab analytics page backed by `stock_checks` / `stock_check_skus`. This is now THE analytics source for the entire HQ portal.
+
+#### Phase 2a — Backend & Cleanup
+
+**Deleted:**
+- `analytics_data.py` — the old `random.seed(42)`-based fake data generator
+- `templates/analytics.html` — an orphaned template (no longer referenced by any route)
+- `templates/fragments/dashboard.html`'s `storeAnalytics` variable injection and `storeReconData` script injection (removed from `templates/fragments/studios.html`)
+- `buildStoreAnalytics()` and `renderSparkline()` JS functions from `hq_shell.html`; all their call sites removed
+
+**New module: `analytics_begin_count.py`**
+
+Standalone module (no `from app import …` — avoids circular import). Uses its own `_get_db()` that mirrors `app.py`'s `get_db()` and reads `STUDS_DATA_DIR`.
+
+| Helper | Route | Description |
+|---|---|---|
+| `get_analytics_overview(range_key)` | `GET /hq/analytics/overview` | Current-week headline stats + network-wide trend data |
+| `get_analytics_participation(range_key)` | `GET /hq/analytics/participation` | Per-studio participation rows with weekly status arrays |
+| `get_analytics_leaderboard(range_key)` | `GET /hq/analytics/leaderboard` | Per-studio composite scores + component rates |
+| `get_studio_analytics(store_id, range_key)` | `GET /hq/analytics/studio/<store_id>` | Per-studio funnel, variance trend, and recent runs |
+
+**Leaderboard score formula** (tunable constants at top of `analytics_begin_count.py`):
+```
+score = round(
+    (completion_pct * SCORE_WEIGHT_COMPLETION +
+     adjustment_pct * SCORE_WEIGHT_ADJUSTMENT +
+     follow_through_pct * SCORE_WEIGHT_FOLLOW_THROUGH) * 100
+)
+```
+Weights: Completion 0.40, Adjustment 0.35, Follow-Through 0.25.
+
+**Range handling:** `_validated_range(req)` in `app.py` accepts `'4w'`, `'12w'`, `'all'`; defaults to `'4w'` for anything else.
+
+**"Abandoned" query-time classification:** `status = 'abandoned'` OR (`status = 'in_progress'` AND `started_at < datetime('now', '-3 days')`). The DB column is never rewritten by analytics reads.
+
+**Files touched:** `app.py` (4 new routes, deleted old /hq/analytics orphan route, removed `analytics_data` import, simplified `hq_section_analytics`), `analytics_begin_count.py` (new), `templates/fragments/studios.html` (removed `storeAnalytics` injection), `templates/hq_shell.html` (removed sparkline JS), `analytics_data.py` (deleted), `templates/analytics.html` (deleted)
+
+#### Phase 2b — Frontend
+
+**New file: `templates/fragments/analytics.html`** — complete 3-tab HQ Analytics UI.
+
+Structure: `.hq-analytics-subnav` div (hoisted into sticky header by `loadSection()`) + `#analytics-content` div + a single IIFE `<script>`.
+
+**IIFE-scoped state:**
+
+| Variable | Description |
+|---|---|
+| `_tab` | Current active tab (`'overview'` / `'participation'` / `'leaderboard'`) |
+| `_range` | Current range key (`'4w'` / `'12w'` / `'all'`); initialized to `'4w'` |
+| `_cache` | Object keyed by `tab + ':' + range`; cleared entirely on range change |
+| `_charts` | Object mapping canvas ID → Chart instance; destroyed before re-render |
+| `_expandedStoreId` | Currently expanded leaderboard drill-down store ID (or null) |
+
+**Public interface** (exported to `window` for `onclick=` attribute compatibility):
+
+| Function | Trigger | Behavior |
+|---|---|---|
+| `_aTabSwitch(tab)` | Sub-tab link click | Switches tab, updates underline indicator, checks cache, fetches if miss |
+| `_aRangeChange()` | Range dropdown `onchange` | Reads `sel.value`, updates `_range`, clears `_cache`, re-fetches current tab |
+| `_aToggleDrill(storeId, trEl)` | Leaderboard row click | Expands/collapses per-studio drill-down row in-place |
+| `_aPartSort(col)` | Participation table header click | Re-sorts participation rows client-side |
+| `_aLbSort(col)` | Leaderboard table header click | Collapses open drill-down, re-sorts leaderboard rows client-side |
+
+**`_whenChart(fn)` polling helper:** Polls `typeof Chart !== 'undefined'` every 50ms for up to 2 seconds; handles the CDN load / IIFE execution race condition.
+
+**Files touched:** `templates/fragments/analytics.html` (complete rewrite)
+
+#### Bug Fixes (post-Phase 2a, pre-Phase 2b)
+
+**Bug 1 — Leaderboard scores always 0:**
+- Root cause: `round()` was applied to the weighted sum (a float 0–1) before multiplying by 100. Any sum < 0.5 rounded to 0.
+- Fix: moved `* 100` inside `round()` so the full 0–100 range is preserved.
+- File: `analytics_begin_count.py`
+
+**Bug 2 — Completed runs overwritten as abandoned:**
+- Root cause: `mark_stock_check_abandoned()` ran an unconditional `UPDATE … SET status = 'abandoned'`. When a user clicked "Start a new Stock Check" on the Step 7 completion screen, the just-finished `completed` run was overwritten.
+- Fix: added `AND status != 'completed'` to the `WHERE` clause. The function is now a no-op on completed rows.
+- File: `app.py`
+
+---
+
+### Dashboard Retirement
+
+**Summary:** The old HQ Dashboard (George's reconciliation dashboard — CSV-upload based, powered by `reconcile.py`) was retired. `reconcile.py` is NOT deleted — it continues to power the Studios section status dots, the header `UPDATED:` timestamp, and the `/hq/refresh` endpoint.
+
+**What was deleted:**
+- `templates/fragments/dashboard.html` — the entire dashboard fragment
+
+**What was changed:**
+
+| File | Change |
+|---|---|
+| `app.py` | `hq_section_dashboard()` now returns `redirect(url_for('hq_section_analytics'))` instead of calling `run_reconciliation()` + rendering the deleted fragment |
+| `app.py` | `hq_index()` (`GET /hq/`) still calls `run_reconciliation()` to populate `data.last_loaded` for the shell header timestamp — unchanged |
+| `templates/hq_shell.html` | Removed `DASHBOARD` tab `<a>` and its `|` pipe from the section nav; three tabs remain: ANALYTICS \| DATABASE \| STUDIOS |
+| `templates/hq_shell.html` | Removed `initDashboard()`, `toggleDetail()`, `applyFilters()`, `showEmailDraft()`, `closeEmailModal()`, `copyEmailDraft()` functions (dashboard-only; 70+ lines removed) |
+| `templates/hq_shell.html` | Removed two dashboard conditionals from `loadSection()` and `doRefresh()` (`if (section === 'dashboard') initDashboard()`, `if (currentSection === 'dashboard') loadSection('dashboard')`) |
+| `templates/hq_shell.html` | Changed initial-load IIFE from `if (section) loadSection(section)` to `var section = params.get('section') \|\| 'analytics'; loadSection(section)` — Analytics is now the default landing section |
+| `templates/macros.html` | Removed `DASHBOARD` link and its `|` pipe from the `section_nav()` macro (used by legacy `database.html`, `settings.html`, `upload.html`) |
+
+**`reconcile.py` call sites — NOT dead code:**
+
+| Call site | Still active | Purpose |
+|---|---|---|
+| `hq_index()` | ✅ | Populates `data.last_loaded` for the `UPDATED:` header timestamp |
+| `hq_refresh()` | ✅ | Refreshes the timestamp on POST |
+| `hq_section_studios()` | ✅ | Builds `recon_status` and `recon_data` for the status dots in the Studios table and profile panel |
+| `hq_email_draft()` | ✅ | Still referenced by the email-draft route |
+| `hq_section_dashboard()` | 🔴 dead | Removed with the old function body; now just `return redirect(...)` |
+
+---
+
+### Known Issues
+
+#### KI-1: HQ Analytics range selector resets on sub-tab switch
+
+**Symptom:** When the user changes the range dropdown on any Analytics sub-tab (e.g., to "Last 12 weeks" or "All time") and then clicks a different sub-tab link (OVERVIEW / PARTICIPATION / LEADERBOARD), the dropdown visually reverts to "Last 4 weeks."
+
+**Impact:** Cosmetically confusing. Functionally a non-issue with the current test dataset — all test runs occurred within the first 4 weeks of data, so the backend returns identical results for all three range values. Will become functionally impactful once data spans more than 4 weeks.
+
+**Root cause:** Diagnosed twice by static code analysis during the session; both passes concluded that the `_aTabSwitch` code path does not touch the range selector and should not reset it, which contradicts the live observed behavior. The cause was not pinpointed from code reading alone.
+
+**Hypothesis (unverified):** The `.hq-analytics-subnav` DOM node (which contains the range select) is being silently re-attached or re-parsed during a tab-switch sequence, causing the select element to lose its transient `.value` state and revert to its default first-option value.
+
+**Suggested investigation:** Add a `MutationObserver` on `#hq-header-subnav` plus `console.log` instrumentation in `_aTabSwitch` to trace exactly what DOM mutations occur between the range change and the next sub-tab click. Code-reading alone has not been sufficient to locate the root cause.
+
+**Files involved:** `templates/fragments/analytics.html` (JS IIFE), `templates/hq_shell.html` (`loadSection()` hoist logic)
+
+**Resolution:** Deferred.
