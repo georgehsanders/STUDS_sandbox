@@ -103,17 +103,6 @@ SEED_STORES = [
 ]
 
 
-# --- Studio QR code values for Begin Count wizard ---
-# Pilot scope: Studio 002 Hudson Yards only.
-# To add more studios, add their store_id and OmniCounts registration URL/value here.
-STUDIO_QR_CODES = {
-    '002': 'https://app.omnicounts.com/studio/002',  # TODO: replace with real OmniCounts URL for studio 002
-}
-STUDIO_QR_LABELS = {
-    '002': 'Studio 002 \u2014 Hudson Yards',
-}
-
-
 def get_db():
     """Get a SQLite connection to the store profiles database."""
     conn = sqlite3.connect(STORE_DB)
@@ -547,15 +536,12 @@ def studio_index():
 @studio_login_required
 def studio_tutorial():
     current_step = session.get('begin_count_step', 0)
-    store_id = session.get('store_id', '')
-    qr_value = STUDIO_QR_CODES.get(store_id, '')
-    qr_label = STUDIO_QR_LABELS.get(store_id, '')
+    current_store_id = session.get('store_id', '').lstrip('0') or '0'
     bp_upload_done = 'begin_count_bp_onhand' in session
     bp_filename = session.get('begin_count_bp_filename', '')
     return render_template('studio_tutorial.html',
                            current_step=current_step,
-                           qr_value=qr_value,
-                           qr_label=qr_label,
+                           current_store_id=current_store_id,
                            bp_upload_done=bp_upload_done,
                            bp_filename=bp_filename)
 

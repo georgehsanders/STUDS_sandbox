@@ -114,7 +114,6 @@
             margin-top: 20px;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body class="studio-body">
 
@@ -196,9 +195,16 @@
             <h2 class="studio-tutorial-heading">Step 2: Log into OmniCounts and Scan Your Studio's QR Code</h2>
             <p class="studio-tutorial-body">Log into the OmniCounts Dashboard on your laptop. Then open the OmniCounts app on your mobile phone and scan the QR code below.</p>
             <div style="margin:24px 0 28px 0;text-align:center;">
-                <div id="qr-code-container" style="display:inline-block;"></div>
-                <div id="qr-no-code" style="display:none;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#999;font-style:italic;padding:32px 0;">QR code not yet configured for your studio. Contact HQ.</div>
-                <div id="qr-label" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:500;letter-spacing:0.04em;color:#1a1a1a;margin-top:10px;"></div>
+                {% if current_store_id == '2' %}
+                <div style="display:inline-block;border:1.5px solid #e0e0e0;padding:16px;background:#fff;">
+                    <img src="{{ url_for('static', filename='qr/studio_002.png') }}"
+                         alt="OmniCounts QR code — Studio 002 Hudson Yards"
+                         style="width:260px;height:260px;display:block;">
+                </div>
+                <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:500;letter-spacing:0.04em;color:#1a1a1a;margin-top:12px;">Studio 002 &#8212; Hudson Yards</div>
+                {% else %}
+                <p style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#999;font-style:italic;">QR code for your studio isn't set up yet. Please contact HQ.</p>
+                {% endif %}
             </div>
             <button class="studio-tutorial-btn" onclick="goToStep('step-3')">I've done this — onto the next step!</button>
         </div>
@@ -249,8 +255,6 @@
         var currentStepFromServer = {{ current_step | tojson }};
         var bpUploadDone      = {{ bp_upload_done | tojson }};
         var bpFilenameFromSvr = {{ bp_filename | tojson }};
-        var qrValue           = {{ qr_value | tojson }};
-        var qrLabel           = {{ qr_label | tojson }};
 
         var STEP_ID_TO_NUM = {
             'step-intro': 0,
@@ -366,31 +370,6 @@
             });
         }
 
-        // ---- Step 2: QR code rendering ----
-
-        function renderQr() {
-            if (qrValue) {
-                try {
-                    new QRCode(document.getElementById('qr-code-container'), {
-                        text: qrValue,
-                        width: 200,
-                        height: 200,
-                        colorDark: '#000000',
-                        colorLight: '#ffffff',
-                        correctLevel: QRCode.CorrectLevel.M,
-                    });
-                } catch (e) {
-                    console.error('QR render error:', e);
-                }
-                if (qrLabel) {
-                    document.getElementById('qr-label').textContent = qrLabel;
-                }
-            } else {
-                document.getElementById('qr-code-container').style.display = 'none';
-                document.getElementById('qr-no-code').style.display = '';
-            }
-        }
-
         // ---- Page load ----
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -416,8 +395,6 @@
                 }
             }
 
-            // Render QR code (runs regardless of current step; DOM element always present)
-            renderQr();
         });
     </script>
 </body>
