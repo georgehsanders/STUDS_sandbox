@@ -451,25 +451,81 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] Print-specific stylesheet shows a "STUDS" header visible only on paper
 
 ### Begin Count / Tutorial Page (`/studio/tutorial`)
+
+> **⚠️ Rebuilt in sandbox:** This flow was replaced from a 9-step static instructional tutorial (no persistence, no uploads) with a 7-step functional stock count wizard backed by Flask session storage. See the Sandbox Changes section at the bottom of this document for full detail.
+
+#### Navigation & Shell
 - [ ] On Studio main page: lime BEGIN COUNT button in content row (right of search bar), navigates to `/studio/tutorial`
 - [ ] On OmniCounts page: BEGIN COUNT navlink in header nav (lavender, left of STUDIO link)
-- [ ] Sub-header label on tutorial page reads "BEGIN COUNT"
 - [ ] Header matches Studio sub-page layout (left: HQ/LOGOUT, center: STUDS logo, right: STUDIO link back)
-- [ ] Sub-header label shows "TUTORIAL"
-- [ ] Single-page multi-step walkthrough; one step visible at a time
-- [ ] Intro screen (no step number): heading "Hey, Stud!", four-item checkbox checklist, begin button
-- [ ] Step 1: Brightpearl Inventory Summary — instructions with numbered sub-list, link to Brightpearl
-- [ ] Step 2: Converting to OmniCounts File — instructions with link to /studio/omnicounts (opens new tab)
-- [ ] Step 3: Data Dumping into Filezilla — placeholder text "(Jasmine to add more details here later...)"
-- [ ] Step 4: Printing SKU List — instructions for printing/scanning barcodes
-- [ ] Step 5: Begin your count — placeholder text
-- [ ] Step 6: Close Out Your Count — placeholder text
-- [ ] Step 7: Reconcile variances — instructions referencing handoffs@omnicounts.com variance email
-- [ ] Step 8: Check for major variances — recount instruction
-- [ ] Step 9: Make adjustments in Brightpearl — final step with completion message, no next button
-- [ ] Clicking next button hides current step and shows next step, scrolls to top
-- [ ] No persistence — refreshing returns to intro
-- [ ] Checkboxes on intro are visual only, no state tracked
+- [ ] Sub-header label shows "BEGIN COUNT"
+- [ ] Single-page multi-step flow; one step visible at a time
+- [ ] Step indicator bar (numbered 1–7) appears at top of wizard once intro is passed; hidden on intro screen
+- [ ] Completed steps are clickable in the step indicator for backward and forward navigation
+- [ ] Current step highlighted; locked/future steps greyed out and non-clickable
+
+#### Intro Screen
+- [ ] Heading: "Hey, Stud!" — centered, font ~15–20% larger than base body size
+- [ ] Required "Your name" text field above the checklist; advance button disabled until field is non-empty (trimmed)
+- [ ] Four-item checkbox checklist (visual only, no state tracked)
+- [ ] Begin button calls `beginStockCheck()`: saves name via POST /studio/tutorial/counter-name, then navigates to Step 1
+- [ ] Intro screen not shown again once step > 0 (resume-on-return behavior)
+
+#### Session & Persistence
+- [ ] Step tracked in `session['begin_count_step']` (0 = intro); page resumes at current step on reload
+- [ ] Browser-close / session-expiry resets to intro (Flask default session cookies)
+- [ ] Start timestamp captured exactly once on step 0→1 transition (`session['begin_count_started_at']`, ISO 8601 UTC)
+- [ ] Completion flags tracked for steps without upload-based signals: `begin_count_step2_done`, `begin_count_step3_done`, `begin_count_step5_done`, `begin_count_step6_done`
+- [ ] Counter name stored in `session['begin_count_counter_name']`
+- [ ] POST /studio/tutorial/step updates `session['begin_count_step']`; sets done flags on forward advance
+
+#### Step 1 — Brightpearl Upload
+- [ ] Drag-and-drop or click-to-browse file upload for Brightpearl Inventory Summary CSV
+- [ ] Auto-uploads on file selection; color-coded states (idle / uploading / success / error)
+- [ ] On success: parses CSV, stores `session['begin_count_bp_onhand']` (uppercase SKU keys) and `session['begin_count_bp_filename']`
+- [ ] Advance button gated: enabled only after successful upload
+- [ ] Route: POST /studio/tutorial/upload-bp
+- [ ] Re-uploading recomputes downstream variance table on next page load
+
+#### Step 2 — QR Code Scan
+- [ ] Displays QR code image for the current studio (from `static/qr/studio_{id}.png`)
+- [ ] Fallback message shown for studios without a QR code configured
+- [ ] Instructional-only; step marked complete when user advances
+
+#### Step 3 — SKU Reference Grid
+- [ ] Read-only 5-across SKU card grid mirroring the Studio main page layout
+- [ ] Built using the same helpers (scan_input_files, load_master_skus, load_sku_status, etc.)
+- [ ] Includes real-time search/filter input
+- [ ] Instructional-only; step marked complete when user advances
+
+#### Step 4 — OmniCounts Upload & Variance Table
+- [ ] Drag-and-drop or click-to-browse file upload for OmniCounts Count Report CSV
+- [ ] Auto-uploads; detects SKU + counted columns, sums per SKU, filters to assigned SKUs
+- [ ] Stores `session['begin_count_oc_counted']` and `session['begin_count_oc_filename']`
+- [ ] Route: POST /studio/tutorial/upload-oc
+- [ ] Advance button gated on successful upload
+- [ ] Variance table columns: SKU | Product Name | On-Hand | Counted (editable) | Variance
+- [ ] Variance formula: Counted − On-Hand
+- [ ] Variance color: green (positive/overage), red (negative/shortage), neutral (zero)
+- [ ] Edits to Counted field trigger debounced (600ms) fire-and-forget POST /studio/tutorial/variance/update; persists each change to `session['begin_count_oc_counted']`
+- [ ] Re-uploading OC file overwrites counted data; re-uploading Step 1 file does NOT wipe OC data
+
+#### Steps 5 & 6 — Instructional Screens
+- [ ] Step 5: Check for major variances — instructional-only, advance button present
+- [ ] Step 6: Make adjustments in Brightpearl — instructional-only, advance button present
+- [ ] Advancing from either sets the corresponding done flag in session
+
+#### Step 7 — Crosscheck & Completion
+- [ ] Drag-and-drop or click-to-browse file upload for fresh post-adjustment Brightpearl CSV
+- [ ] Route: POST /studio/tutorial/upload-bp-verify
+- [ ] Stores `session['begin_count_bp_verify_onhand']` and `session['begin_count_bp_verify_filename']`
+- [ ] Upload blocked if no `begin_count_oc_counted` in session
+- [ ] Crosscheck table columns: SKU | Product Name | New On-Hand | Final Counted | Status (✅ match / ❌ still off)
+- [ ] Completion banner: green "All adjustments have been verified. Great work." when still_off == 0; amber "Some variances still need attention — see the crosscheck table above for details." when still_off > 0
+- [ ] Summary block: Completed by (counter name), Total SKUs checked, Variances reconciled, Variances still off, Step 1 / Step 4 / Step 7 filenames, Completion timestamp, Duration
+- [ ] Duration formatted by `format_duration(seconds)` in app.py: `"<1m"` / `"{n}m"` / `"{h}h {n}m"`
+- [ ] "Back to Dashboard" button returns to `/studio/`
+- [ ] "Start a new Stock Check" secondary button triggers browser confirm dialog then POST /studio/tutorial/reset, which clears all `begin_count_*` session keys and redirects to `/studio/tutorial`
 
 ### OmniCounts Page (`/studio/omnicounts`)
 - [ ] Dedicated page accessible via OMNICOUNTS navlink in the Studio header (lavender button, left of PRINT)
@@ -540,3 +596,117 @@ Exhaustive checklist of every user-facing feature and observable behavior.
 - [ ] `SETTINGS_FILE` always stays at the repo root regardless of `STUDS_DATA_DIR`
 - [ ] On startup (`__main__`), `INPUT_DIR`, `PROCESSED_DIR`, `DATABASE_DIR`, `MASTER_DIR`, and `IMAGES_DIR` are created if they don't exist
 - [ ] Purpose: allows Railway (or similar) to mount a single persistent volume at `STUDS_DATA_DIR` containing all mutable state
+
+---
+
+## Sandbox Changes
+
+> Changes made in the active development session. All items below are scoped to the Begin Count flow (`/studio/tutorial`). The Start Your Stock Check flow (`/studio/stock-check/*`, `templates/stock_check.html`, `stock_check_count.html`, `stock_check_verify.html`) and its session keys (`bp_onhand`, `sc_counts`, `post_bp_onhand`, etc.) were not touched in any phase of this work.
+
+---
+
+### Begin Count Wizard Rebuild — Phases 1–5
+
+**Summary:** Replaced the old 9-step static instructional tutorial (no uploads, no persistence, no data processing) with a fully functional 7-step stock count wizard backed by Flask session storage.
+
+**Files touched:** `app.py`, `templates/studio_tutorial.html`
+
+**Routes added:**
+
+| Route | Method | Purpose |
+|---|---|---|
+| `POST /studio/tutorial/step` | POST | Updates `session['begin_count_step']`; sets done flags on forward advance; captures start timestamp on first 0→1 transition |
+| `POST /studio/tutorial/upload-bp` | POST | Parses Brightpearl CSV → `begin_count_bp_onhand` (uppercase keys), `begin_count_bp_filename` |
+| `POST /studio/tutorial/upload-oc` | POST | Parses OmniCounts CSV → `begin_count_oc_counted`, `begin_count_oc_filename` |
+| `POST /studio/tutorial/variance/update` | POST | Persists a single-SKU Counted edit to `begin_count_oc_counted`; sets `session.modified = True` |
+| `POST /studio/tutorial/upload-bp-verify` | POST | Parses post-adjustment BP CSV → `begin_count_bp_verify_onhand`, `begin_count_bp_verify_filename`; returns crosscheck_rows + summary JSON (includes counter_name, duration, completed_at) |
+| `POST /studio/tutorial/counter-name` | POST | Validates (1–100 chars, stripped) and stores `begin_count_counter_name` |
+| `POST /studio/tutorial/reset` | POST | Clears all 13 `begin_count_*` session keys; redirects to `/studio/tutorial` |
+
+**`GET /studio/tutorial` additions:** builds `step_status` list (completed/current/locked per step), `variance_rows` (rebuilt from `begin_count_bp_onhand` + `begin_count_oc_counted` on every load), `crosscheck_rows` (rebuilt from `begin_count_bp_verify_onhand` + `begin_count_oc_counted` on every load), `summary` dict (counter_name, duration via `_resume_duration`), and `counter_name` for intro field pre-fill.
+
+**Session keys (all `begin_count_*` prefix):**
+
+| Key | Type | Set by | Description |
+|---|---|---|---|
+| `begin_count_step` | int | POST /tutorial/step | Current wizard step (0 = intro) |
+| `begin_count_started_at` | str (ISO 8601 UTC) | POST /tutorial/step | Start timestamp; captured once on 0→1 |
+| `begin_count_bp_onhand` | dict | POST /tutorial/upload-bp | On-hand quantities keyed by uppercase SKU |
+| `begin_count_bp_filename` | str | POST /tutorial/upload-bp | Original BP upload filename |
+| `begin_count_oc_counted` | dict | POST /tutorial/upload-oc | Counted quantities keyed by uppercase SKU |
+| `begin_count_oc_filename` | str | POST /tutorial/upload-oc | Original OC upload filename |
+| `begin_count_bp_verify_onhand` | dict | POST /tutorial/upload-bp-verify | Post-adjustment BP on-hand quantities |
+| `begin_count_bp_verify_filename` | str | POST /tutorial/upload-bp-verify | Post-adjustment BP upload filename |
+| `begin_count_step2_done` | bool | POST /tutorial/step | Step 2 completion flag |
+| `begin_count_step3_done` | bool | POST /tutorial/step | Step 3 completion flag |
+| `begin_count_step5_done` | bool | POST /tutorial/step | Step 5 completion flag |
+| `begin_count_step6_done` | bool | POST /tutorial/step | Step 6 completion flag |
+| `begin_count_counter_name` | str | POST /tutorial/counter-name | Counter's name from intro screen |
+
+**`app.py` helpers added:**
+- `format_duration(seconds)` — returns `"<1m"` / `"{n}m"` / `"{h}h {n}m"`
+- `_resume_duration(sess)` — reads `begin_count_started_at` from session, computes elapsed seconds, returns formatted string
+
+**Step-by-step breakdown:**
+
+- **Intro:** "Hey, Stud!" heading (centered, ~15–20% larger font), required name field, four-item visual checklist, advance button gated on non-empty name + all checklist conditions
+- **Step 1:** BP CSV upload → on-hand dict stored in session; advance gated on success
+- **Step 2:** QR code display from `static/qr/studio_{id}.png`; fallback for unconfigured studios
+- **Step 3:** Read-only 5-across SKU grid with search filter, using same helpers as Studio main page
+- **Step 4:** OC CSV upload → variance table (SKU / Product Name / On-Hand / Counted / Variance); Counted column is editable, debounced 600ms persist; green for overage, red for shortage, neutral for zero; advance gated on successful upload
+- **Steps 5 & 6:** Instructional-only screens with advance buttons; advancing sets done flags
+- **Step 7:** BP-verify upload → crosscheck table (SKU / Product Name / New On-Hand / Final Counted / ✅/❌ Status); adaptive completion banner (green all-clear vs. amber still-off); summary block (name, timestamps, duration, filenames, counts)
+
+---
+
+### Step Indicator & Navigation
+
+**What was built:** Numbered step indicator (1–7) at the top of the wizard. Hidden on intro screen. Clickable nodes for completed steps; current step highlighted; locked/future nodes non-clickable.
+
+**Key behaviors:**
+- `goToStep(id)` updates `stepDoneMap` and `currentClientStep`, then calls `updateStepIndicator()`
+- `onIndicatorNodeClick(stepNum)` navigates only if `stepDoneMap[stepNum]` is true
+- Line segments between nodes color to reflect completion state
+- Step status list (`step_status`) is server-rendered into `stepStatusFromSvr` JS variable on every page load
+
+**Files touched:** `app.py` (step_status construction in GET /studio/tutorial), `templates/studio_tutorial.html` (`#step-indicator` HTML block + `updateStepIndicator()` / `onIndicatorNodeClick()` JS functions)
+
+---
+
+### Reset Button
+
+**What was built:** A "Start a new Stock Check" secondary button on the Step 7 completion screen. Requires browser `confirm()` before firing.
+
+- Route: `POST /studio/tutorial/reset`
+- Clears all 13 `begin_count_*` session keys
+- Redirects to `/studio/tutorial` (intro screen)
+
+**Files touched:** `app.py`, `templates/studio_tutorial.html`
+
+---
+
+### Counter Name Entry
+
+**What was built:** Required "Your name" text input on the intro screen. Stored in session and displayed in the Step 7 summary as "Completed by: ...". Advance button gated on non-empty trimmed value.
+
+- Route: `POST /studio/tutorial/counter-name`
+- Session key: `begin_count_counter_name`
+- Validation: 1–100 characters after stripping whitespace
+- Cleared on reset
+
+**Files touched:** `app.py`, `templates/studio_tutorial.html`
+
+---
+
+### Duration Tracking
+
+**What was built:** Server-side elapsed time from first step to Step 7 completion. Start timestamp captured exactly once; formatted at render time.
+
+- Session key: `begin_count_started_at` (ISO 8601 UTC)
+- Guard: re-entering the intro (e.g., re-navigating to step 0) does not reset the timestamp if it is already set
+- `format_duration(seconds)` helper in `app.py`: `"<1m"` (< 60s) / `"{n}m"` (< 1h) / `"{h}h {n}m"` (≥ 1h)
+- `_resume_duration(sess)` computes elapsed from stored timestamp to `datetime.now(timezone.utc)`
+- Duration rendered in Step 7 summary block (always visible row, never `display:none`)
+- Cleared on reset
+
+**Files touched:** `app.py`, `templates/studio_tutorial.html`
