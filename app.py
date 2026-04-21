@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import sqlite3
+import sys
 import zipfile
 from datetime import datetime, timezone
 from functools import wraps
@@ -237,6 +238,39 @@ def init_store_db():
             "INSERT INTO hq_users (username, password_hash, display_name, email) VALUES (?, ?, ?, ?)",
             ('jasmine.vu', pw_hash, 'Jasmine Vu', 'jasmine.vu@studs.com')
         )
+    # Analytics tables — Begin Count stock check history
+    conn.execute('''CREATE TABLE IF NOT EXISTS stock_checks (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        store_id            TEXT    NOT NULL,
+        counter_name        TEXT    NOT NULL DEFAULT '',
+        skulist_filename    TEXT,
+        week_identifier     TEXT,
+        started_at          TIMESTAMP NOT NULL,
+        completed_at        TIMESTAMP,
+        duration_seconds    INTEGER,
+        status              TEXT    NOT NULL DEFAULT 'in_progress',
+        furthest_step       INTEGER NOT NULL DEFAULT 1,
+        assigned_sku_count  INTEGER,
+        total_variances     INTEGER,
+        variances_reconciled INTEGER,
+        variances_still_off INTEGER,
+        bp_filename         TEXT,
+        oc_filename         TEXT,
+        bp_verify_filename  TEXT,
+        created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS stock_check_skus (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        stock_check_id  INTEGER NOT NULL,
+        sku             TEXT    NOT NULL,
+        on_hand         INTEGER,
+        counted         INTEGER,
+        new_on_hand     INTEGER,
+        final_counted   INTEGER,
+        matched         INTEGER,
+        created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     # Data migration: replace dummy studios with real list (idempotent)
     migrate_to_real_studios(conn)
@@ -650,6 +684,229 @@ def _resume_duration(sess):
         return '\u2014'
 
 
+# ---------------------------------------------------------------------------
+# Begin Count analytics — week identifier helper
+# ---------------------------------------------------------------------------
+
+# Local copy of the SKU list filename pattern. Defined here rather than imported
+# from reconcile.py to keep the analytics layer decoupled from the reconciliation
+# pipeline. Must stay in sync with RE_SKU_LIST in reconcile.py.
+_RE_SKULIST_WEEK = re.compile(
+    r'^SKU[_ ]?[Ll]ist[-_](\d{2}[-_]\d{2}[-_]\d{2})\.csv$', re.IGNORECASE
+)
+
+
+def parse_week_identifier(skulist_filename):
+    """Extract the MM-DD-YY date string from a SKU list filename.
+
+    Normalizes separators to dashes so the stored value is always MM-DD-YY.
+    Returns None if the filename doesn't match the expected pattern.
+
+    Examples:
+      'SKU_List-04_21_26.csv' -> '04-21-26'
+      'SKU List-04-21-26.csv' -> '04-21-26'
+      'SKUList_04-14-26.csv'  -> '04-14-26'
+      'random.csv'            -> None
+    """
+    if not skulist_filename:
+        return None
+    m = _RE_SKULIST_WEEK.match(skulist_filename)
+    if not m:
+        return None
+    return m.group(1).replace('_', '-')
+
+
+# ---------------------------------------------------------------------------
+# Begin Count analytics — write-hook helpers
+#
+# Every helper wraps its DB operations in try/except.  On failure the error is
+# printed to stderr and a sentinel (None / False) is returned.  Callers must
+# never propagate analytics failures to the user-facing JSON response.
+# ---------------------------------------------------------------------------
+
+def create_stock_check_row(store_id, counter_name, started_at):
+    """Insert a new stock_checks row.  Returns the new row id, or None on failure."""
+    try:
+        conn = get_db()
+        try:
+            started_str = (
+                started_at.isoformat()
+                if hasattr(started_at, 'isoformat')
+                else str(started_at)
+            )
+            cur = conn.execute(
+                "INSERT INTO stock_checks "
+                "(store_id, counter_name, started_at, status, furthest_step) "
+                "VALUES (?, ?, ?, 'in_progress', 1)",
+                (store_id, counter_name or '', started_str),
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] create_stock_check_row failed: {exc}', file=sys.stderr)
+        return None
+
+
+def update_stock_check_row(run_id, **fields):
+    """UPDATE stock_checks row id=run_id with the supplied keyword fields.
+    Also sets updated_at = CURRENT_TIMESTAMP.
+    Returns True on success, False on failure.  No-op if run_id is None."""
+    if run_id is None or not fields:
+        return False
+    try:
+        conn = get_db()
+        try:
+            set_clause = ', '.join(f'{k} = ?' for k in fields)
+            values = list(fields.values()) + [run_id]
+            conn.execute(
+                f'UPDATE stock_checks SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                values,
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] update_stock_check_row failed: {exc}', file=sys.stderr)
+        return False
+
+
+def bump_furthest_step(run_id, new_step):
+    """UPDATE furthest_step = MAX(furthest_step, new_step) for the given run.
+    Returns True on success, False on failure.  No-op if run_id is None."""
+    if run_id is None:
+        return False
+    try:
+        conn = get_db()
+        try:
+            conn.execute(
+                'UPDATE stock_checks '
+                'SET furthest_step = MAX(furthest_step, ?), updated_at = CURRENT_TIMESTAMP '
+                'WHERE id = ?',
+                (new_step, run_id),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] bump_furthest_step failed: {exc}', file=sys.stderr)
+        return False
+
+
+def replace_stock_check_skus(run_id, sku_data):
+    """Delete all stock_check_skus rows for run_id and re-insert from sku_data.
+
+    sku_data is a list of dicts each containing at least: sku, on_hand, counted.
+    Atomic: rolls back on any insertion error.
+    Returns True on success, False on failure.  No-op if run_id is None.
+    """
+    if run_id is None:
+        return False
+    try:
+        conn = get_db()
+        try:
+            conn.execute(
+                'DELETE FROM stock_check_skus WHERE stock_check_id = ?', (run_id,)
+            )
+            for row in sku_data:
+                conn.execute(
+                    'INSERT INTO stock_check_skus (stock_check_id, sku, on_hand, counted) '
+                    'VALUES (?, ?, ?, ?)',
+                    (run_id, row['sku'], row.get('on_hand'), row.get('counted')),
+                )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] replace_stock_check_skus failed: {exc}', file=sys.stderr)
+        return False
+
+
+def update_stock_check_sku_counted(run_id, sku, counted):
+    """UPDATE the stock_check_skus row for (run_id, sku) with the new counted value.
+    Returns True on success, False on failure.  No-op if run_id is None."""
+    if run_id is None:
+        return False
+    try:
+        conn = get_db()
+        try:
+            conn.execute(
+                'UPDATE stock_check_skus SET counted = ? '
+                'WHERE stock_check_id = ? AND sku = ?',
+                (counted, run_id, sku),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] update_stock_check_sku_counted failed: {exc}', file=sys.stderr)
+        return False
+
+
+def finalize_stock_check_skus(run_id, verify_data):
+    """UPDATE each stock_check_skus row for run_id with new_on_hand, final_counted, matched.
+
+    verify_data: dict mapping sku -> {'new_on_hand': int, 'final_counted': int, 'matched': bool}
+    Returns True on success, False on failure.  No-op if run_id is None.
+    """
+    if run_id is None:
+        return False
+    try:
+        conn = get_db()
+        try:
+            for sku, vals in verify_data.items():
+                conn.execute(
+                    'UPDATE stock_check_skus '
+                    'SET new_on_hand = ?, final_counted = ?, matched = ? '
+                    'WHERE stock_check_id = ? AND sku = ?',
+                    (
+                        vals.get('new_on_hand'),
+                        vals.get('final_counted'),
+                        1 if vals.get('matched') else 0,
+                        run_id,
+                        sku,
+                    ),
+                )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] finalize_stock_check_skus failed: {exc}', file=sys.stderr)
+        return False
+
+
+def mark_stock_check_abandoned(run_id):
+    """Mark a stock_checks row as abandoned.
+    Returns True on success, False on failure.  No-op if run_id is None."""
+    if run_id is None:
+        return False
+    try:
+        conn = get_db()
+        try:
+            conn.execute(
+                "UPDATE stock_checks "
+                "SET status = 'abandoned', updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (run_id,),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'[analytics] mark_stock_check_abandoned failed: {exc}', file=sys.stderr)
+        return False
+
+
 @app.route('/studio/tutorial')
 @studio_login_required
 def studio_tutorial():
@@ -810,6 +1067,22 @@ def studio_tutorial_step():
     # Guard prevents the timer resetting if the user navigates backward and re-enters Step 1.
     if step == 1 and old_step == 0 and 'begin_count_started_at' not in session:
         session['begin_count_started_at'] = datetime.now(timezone.utc).isoformat()
+        # Analytics: create the stock_checks row for this run.
+        # Errors are swallowed — must not affect the user's flow.
+        try:
+            _store_id = session.get('store_id')
+            if _store_id:
+                _run_id = create_stock_check_row(
+                    store_id=_store_id,
+                    counter_name=session.get('begin_count_counter_name', ''),
+                    started_at=datetime.now(timezone.utc),
+                )
+                if _run_id is not None:
+                    session['begin_count_run_id'] = _run_id
+            else:
+                print('[analytics] step 0→1: store_id missing from session', file=sys.stderr)
+        except Exception as _exc:
+            print(f'[analytics] step 0→1 row creation failed: {_exc}', file=sys.stderr)
     # When advancing forward, mark the step being left as done.
     # Steps 1, 4, 7 use data-presence checks; only 2, 3, 5, 6 need explicit flags.
     if step > old_step:
@@ -821,6 +1094,8 @@ def studio_tutorial_step():
         }
         if old_step in _done_flags:
             session[_done_flags[old_step]] = True
+        # Analytics: track the furthest step reached.
+        bump_furthest_step(session.get('begin_count_run_id'), step)
     return jsonify({'ok': True})
 
 
@@ -871,6 +1146,26 @@ def studio_tutorial_upload_bp():
             bp_data[sku] = qty
         session['begin_count_bp_onhand'] = bp_data
         session['begin_count_bp_filename'] = filename
+        # Analytics: record BP filename, assigned SKU count, and week identifier.
+        # Errors are swallowed — must not affect the user's flow.
+        try:
+            _run_id = session.get('begin_count_run_id')
+            _skl_filename = None
+            _week_id = None
+            _scan = scan_input_files()
+            if _scan['sku_lists']:
+                _skl_filename = _scan['sku_lists'][0][0]
+                _week_id = parse_week_identifier(_skl_filename)
+            update_stock_check_row(
+                _run_id,
+                bp_filename=filename,
+                assigned_sku_count=len(bp_data),
+                skulist_filename=_skl_filename,
+                week_identifier=_week_id,
+            )
+            bump_furthest_step(_run_id, 1)
+        except Exception as _exc:
+            print(f'[analytics] upload-bp update failed: {_exc}', file=sys.stderr)
         return jsonify({'ok': True, 'sku_count': len(bp_data), 'filename': filename})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
@@ -950,6 +1245,25 @@ def studio_tutorial_upload_oc():
         session['begin_count_oc_filename'] = filename
         session.modified = True
 
+        # Analytics: record OC filename, total variances, and per-SKU rows.
+        # Errors are swallowed — must not affect the user's flow.
+        try:
+            _run_id = session.get('begin_count_run_id')
+            _bp_onhand = session.get('begin_count_bp_onhand', {})
+            _total_variances = sum(
+                1 for sku, cnt in oc_counted.items()
+                if _bp_onhand.get(sku) is not None and cnt != _bp_onhand[sku]
+            )
+            update_stock_check_row(_run_id, oc_filename=filename, total_variances=_total_variances)
+            _sku_data = [
+                {'sku': sku, 'on_hand': _bp_onhand.get(sku), 'counted': cnt}
+                for sku, cnt in oc_counted.items()
+            ]
+            replace_stock_check_skus(_run_id, _sku_data)
+            bump_furthest_step(_run_id, 4)
+        except Exception as _exc:
+            print(f'[analytics] upload-oc update failed: {_exc}', file=sys.stderr)
+
         # Build variance rows for the response
         bp_onhand = session.get('begin_count_bp_onhand', {})
         variance_rows = []
@@ -999,6 +1313,13 @@ def studio_tutorial_variance_update():
     oc_counted[sku] = qty
     session['begin_count_oc_counted'] = oc_counted
     session.modified = True
+
+    # Analytics: persist the updated SKU count to the DB row.
+    try:
+        _run_id = session.get('begin_count_run_id')
+        update_stock_check_sku_counted(_run_id, sku, qty)
+    except Exception as _exc:
+        print(f'[analytics] variance-update sku write failed: {_exc}', file=sys.stderr)
 
     bp_onhand = session.get('begin_count_bp_onhand', {})
     bp_val = bp_onhand.get(sku) if bp_onhand else None
@@ -1113,6 +1434,35 @@ def studio_tutorial_upload_bp_verify():
         total_skus = len(crosscheck_rows)
         reconciled = sum(1 for r in crosscheck_rows if r['match'])
         still_off = total_skus - reconciled
+
+        # Analytics: mark the stock check complete with final stats.
+        try:
+            _run_id = session.get('begin_count_run_id')
+            _started_at_str = session.get('begin_count_started_at')
+            _duration_seconds = None
+            if _started_at_str:
+                try:
+                    _started_dt = datetime.fromisoformat(_started_at_str)
+                    _duration_seconds = int(
+                        (datetime.now(timezone.utc) - _started_dt).total_seconds()
+                    )
+                except Exception:
+                    pass
+            update_stock_check_row(
+                _run_id,
+                bp_verify_filename=filename,
+                variances_reconciled=reconciled,
+                variances_still_off=still_off,
+                completed_at=datetime.now(timezone.utc),
+                duration_seconds=_duration_seconds,
+                status='completed',
+            )
+            _verify_data = {r['sku']: {'new_on_hand': r['new_on_hand'], 'final_counted': r['final_counted'], 'matched': r['match']} for r in crosscheck_rows}
+            finalize_stock_check_skus(_run_id, _verify_data)
+            bump_furthest_step(_run_id, 7)
+        except Exception as _exc:
+            print(f'[analytics] upload-bp-verify finalize failed: {_exc}', file=sys.stderr)
+
         completed_at = datetime.now().strftime('%B %d, %Y at %I:%M %p')
 
         summary = {
@@ -1142,6 +1492,14 @@ def studio_tutorial_upload_bp_verify():
 @studio_login_required
 def studio_tutorial_reset():
     """Clear all Begin Count session keys. Never touches any Start Your Stock Check keys."""
+    # Analytics: mark any in-progress run as abandoned before clearing the session.
+    try:
+        _run_id = session.get('begin_count_run_id')
+        if _run_id is not None:
+            mark_stock_check_abandoned(_run_id)
+    except Exception as _exc:
+        print(f'[analytics] reset abandon failed: {_exc}', file=sys.stderr)
+
     _keys = [
         'begin_count_step',
         'begin_count_bp_onhand',
@@ -1156,6 +1514,7 @@ def studio_tutorial_reset():
         'begin_count_step6_done',
         'begin_count_counter_name',
         'begin_count_started_at',
+        'begin_count_run_id',
     ]
     for key in _keys:
         session.pop(key, None)
