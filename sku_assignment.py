@@ -249,17 +249,30 @@ def generate_assignment(target_week_identifier, weight_overrides=None):
     new_sku_cutoff = today - timedelta(days=ASSIGNMENT_NEW_SKU_DELAY_WEEKS * 7)
 
     # 7. Build eligible pool
-    sunset_excluded = 0
-    new_sku_delayed = 0
+    sunset_excluded  = 0
+    inactive_excluded = 0  # no entry, or unrecognised value — not explicitly active
+    new_sku_delayed  = 0
     eligible = []
+    _unknown_statuses_logged = set()  # per-run dedup for stderr hygiene warnings
 
     for sku_raw in master:
         sku = sku_raw.upper()
-        sku_status = status_map.get(sku)
+        status_value = status_map.get(sku)
 
         # Skip sunset SKUs
-        if sku_status == 'sunset':
+        if status_value == 'sunset':
             sunset_excluded += 1
+            continue
+
+        # Require explicit 'active' — no entry or any other value is ineligible
+        if status_value != 'active':
+            if status_value is not None and status_value not in _unknown_statuses_logged:
+                print(
+                    f'[generate_assignment] unrecognised status {status_value!r} for SKU {sku} — treating as ineligible',
+                    file=sys.stderr
+                )
+                _unknown_statuses_logged.add(status_value)
+            inactive_excluded += 1
             continue
 
         # Check first_seen date
@@ -376,6 +389,7 @@ def generate_assignment(target_week_identifier, weight_overrides=None):
         'stats': {
             'eligible_pool_size': len(eligible),
             'sunset_excluded': sunset_excluded,
+            'inactive_excluded': inactive_excluded,
             'new_sku_delayed': new_sku_delayed,
             'total_master_skus': len(master),
         },

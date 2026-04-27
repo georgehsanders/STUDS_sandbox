@@ -186,16 +186,18 @@
             html += '</div>';
 
             /* Stat boxes row — mirrors Overview _statBox() / .hq-analytics-stats pattern */
-            var nSel     = sel.length;
-            var nElig    = stats.eligible_pool_size  != null ? stats.eligible_pool_size  : '—';
-            var nSunset  = stats.sunset_excluded     != null ? stats.sunset_excluded     : 0;
-            var nDelayed = stats.new_sku_delayed      != null ? stats.new_sku_delayed      : 0;
+            var nSel      = sel.length;
+            var nElig     = stats.eligible_pool_size  != null ? stats.eligible_pool_size  : '—';
+            var nSunset   = stats.sunset_excluded     != null ? stats.sunset_excluded     : 0;
+            var nInactive = stats.inactive_excluded   != null ? stats.inactive_excluded   : 0;
+            var nDelayed  = stats.new_sku_delayed     != null ? stats.new_sku_delayed     : 0;
 
             html += '<div class="hq-analytics-stats" style="margin:0 28px 8px;">';
-            html += _statBox('SELECTED',         nSel);
-            html += _statBox('ELIGIBLE',         nElig);
-            if (nSunset  > 0) html += _statBox('SUNSET EXCLUDED',    nSunset);
-            if (nDelayed > 0) html += _statBox('NEW SKU DELAY',       nDelayed);
+            html += _statBox('SELECTED',            nSel);
+            html += _statBox('ELIGIBLE',            nElig);
+            if (nSunset   > 0) html += _statBox('SUNSET EXCLUDED',      nSunset);
+            if (nInactive > 0) html += _statBox('NOT ACTIVE EXCLUDED',  nInactive);
+            if (nDelayed  > 0) html += _statBox('NEW SKU DELAY',        nDelayed);
             html += '</div>';
 
             /* Filename line */
