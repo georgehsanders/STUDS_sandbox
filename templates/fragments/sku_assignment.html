@@ -1,0 +1,411 @@
+<!-- =========================================================================
+     HQ SKU Assignment fragment
+     Sub-nav (.hq-analytics-subnav) is hoisted into the sticky header by
+     loadSection() in hq_shell.html. Everything below it stays in #hq-content.
+     ========================================================================= -->
+
+<style>
+#sku-preview-table td.num { text-align: right; }
+#sku-preview-table td.reasoning { min-width: 200px; text-align: left; }
+#sku-preview-table tbody tr:nth-child(even) { background: #f9f9f9; }
+#sku-preview-table tbody tr:nth-child(odd)  { background: #ffffff; }
+#sku-preview-table td.composite { font-weight: 600; text-align: right; }
+.sku-status-block {
+    background: #f5f7fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 3px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+.sku-status-block .sku-week-label {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: #1a1a1a;
+}
+.sku-status-block .sku-meta {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+    letter-spacing: 0.04em;
+}
+.sku-empty-block {
+    background: #fff8e1;
+    border: 1px solid #f0c040;
+    border-radius: 3px;
+    padding: 16px 20px;
+    font-size: 13px;
+    color: #7a5c00;
+    margin-bottom: 20px;
+}
+.sku-banner-success {
+    background: #f0faf3;
+    border: 1px solid #4a9e5c;
+    border-radius: 3px;
+    padding: 12px 16px;
+    color: #1e5c2d;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+.sku-banner-error {
+    background: #fef2f2;
+    border: 1px solid #dc2626;
+    border-radius: 3px;
+    padding: 12px 16px;
+    color: #9b1c1c;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+.sku-publish-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 20px;
+}
+.sku-btn-publish {
+    background: #2d6930;
+    color: #fff;
+    border: none;
+    padding: 10px 22px;
+    font-size: 13px;
+    font-family: inherit;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    font-weight: 500;
+}
+.sku-btn-publish:hover:not(:disabled) { background: #245527; }
+.sku-btn-publish:disabled { background: #999; cursor: not-allowed; }
+.sku-history-heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #555;
+    margin: 24px 0 10px;
+}
+</style>
+
+<div class="hq-analytics-subnav">
+    <div style="display:flex;align-items:center;width:100%;">
+        <div style="flex:1;display:flex;align-items:center;">
+            <span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#333;">SKU ASSIGNMENT</span>
+        </div>
+        <div style="flex:1;display:flex;justify-content:flex-end;align-items:center;">
+            <button class="hq-portal-link hq-portal-btn" onclick="_skuLoad();" style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;">Refresh Preview</button>
+        </div>
+    </div>
+</div>
+
+<div id="sku-assignment-content" style="padding:28px;min-height:200px;">
+    <div style="padding:60px;text-align:center;color:#999;font-size:13px;">Loading&hellip;</div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+
+    /* Parse "MM-DD-YY" into a display string like "April 28, 2025" */
+    function _parseWeekId(wid) {
+        if (!wid) return wid;
+        var parts = wid.split('-');
+        if (parts.length !== 3) return wid;
+        var m = parseInt(parts[0], 10);
+        var d = parseInt(parts[1], 10);
+        var y = parseInt(parts[2], 10);
+        if (isNaN(m) || isNaN(d) || isNaN(y)) return wid;
+        var year = y < 100 ? 2000 + y : y;
+        var monthName = MONTHS[m - 1] || String(m);
+        return monthName + ' ' + d + ', ' + year;
+    }
+
+    /* Short form: "April 28" */
+    function _parseWeekIdShort(wid) {
+        if (!wid) return wid;
+        var parts = wid.split('-');
+        if (parts.length !== 3) return wid;
+        var m = parseInt(parts[0], 10);
+        var d = parseInt(parts[1], 10);
+        if (isNaN(m) || isNaN(d)) return wid;
+        var monthName = MONTHS[m - 1] || String(m);
+        return monthName + ' ' + d;
+    }
+
+    function _esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function _fmtNum(n, decimals) {
+        if (n === null || n === undefined) return '&mdash;';
+        return Number(n).toFixed(decimals);
+    }
+
+    function _lastCounted(item) {
+        var r = item.reasoning || '';
+        if (r.toLowerCase().indexOf('never counted') !== -1) return 'Never';
+        var w = item.weeks_since_counted;
+        if (w === null || w === undefined) return 'Never';
+        w = parseFloat(w);
+        if (isNaN(w)) return '&mdash;';
+        if (w <= 0.5) return 'This week';
+        if (w > 12) return '12+ wks';
+        return Math.round(w) + ' wks';
+    }
+
+    function _fmtTriggeredAt(iso) {
+        if (!iso) return '&mdash;';
+        try {
+            var d = new Date(iso);
+            return d.toLocaleString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: 'numeric', minute: '2-digit', hour12: true
+            });
+        } catch (e) { return _esc(iso); }
+    }
+
+    /* -------------------------------------------------------------------------
+       State
+    ------------------------------------------------------------------------- */
+    var _preview = null;
+    var _runs    = [];
+    var _publishBannerHtml = '';
+
+    /* -------------------------------------------------------------------------
+       Entry point
+    ------------------------------------------------------------------------- */
+    window._skuLoad = function () {
+        var el = document.getElementById('sku-assignment-content');
+        if (el) el.innerHTML = '<div style="padding:60px;text-align:center;color:#999;font-size:13px;">Loading…</div>';
+        _publishBannerHtml = '';
+
+        var pFetch = fetch('/hq/sku-assignment/preview')
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            });
+        var rFetch = fetch('/hq/sku-assignment/runs')
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            });
+
+        Promise.all([pFetch, rFetch])
+            .then(function (results) {
+                _preview = results[0];
+                _runs    = results[1] || [];
+                _render();
+            })
+            .catch(function (err) {
+                var el = document.getElementById('sku-assignment-content');
+                if (!el) return;
+                el.innerHTML = '<div style="padding:40px;text-align:center;color:#999;font-size:13px;">'
+                    + 'Couldn’t load SKU assignment data. '
+                    + '<a href="javascript:void(0)" onclick="_skuLoad()" style="color:#1a1a1a;">Retry</a>'
+                    + '</div>';
+            });
+    };
+
+    /* -------------------------------------------------------------------------
+       Render
+    ------------------------------------------------------------------------- */
+    function _render() {
+        var el = document.getElementById('sku-assignment-content');
+        if (!el) return;
+
+        var p    = _preview || {};
+        var sel  = p.selected || [];
+        var stats = p.stats   || {};
+        var wid  = stats.target_week_identifier || p.target_week_identifier || '';
+        var dateStr      = _parseWeekId(wid);
+        var dateStrShort = _parseWeekIdShort(wid);
+        var hasData = sel.length > 0;
+
+        var html = '';
+
+        /* --- Intro block --- */
+        html += '<div style="margin-bottom:20px;">';
+        html += '<p style="font-size:14px;color:#1a1a1a;margin:0 0 6px;">Below is the proposed assigned SKU list for the upcoming week. '
+            + 'Click ‘Save &amp; Publish’ to write the list to the input folder so studios start using it next Monday.</p>';
+        html += '<p style="font-size:12px;color:#999;margin:0;">Algorithm settings: 60% sales rank weight, 40% time-since-last-count weight. '
+            + 'Top 20 SKUs selected. New SKUs delayed 4 weeks before entering rotation.</p>';
+        html += '</div>';
+
+        /* --- Publish banner (after a publish action) --- */
+        if (_publishBannerHtml) {
+            html += _publishBannerHtml;
+        }
+
+        /* --- Status block --- */
+        if (hasData) {
+            html += '<div class="sku-status-block">';
+            html += '<div class="sku-week-label">Preview for week of ' + _esc(dateStr) + '</div>';
+            html += '<div class="sku-meta">Filename to publish: SKUList_' + _esc(wid) + '.csv</div>';
+            html += '<div class="sku-meta">' + sel.length + ' selected';
+            if (stats.eligible_pool_size != null) {
+                html += ' of ' + stats.eligible_pool_size + ' eligible SKUs';
+            }
+            html += '</div>';
+            if (stats.new_sku_delayed && stats.new_sku_delayed > 0) {
+                html += '<div class="sku-meta">' + stats.new_sku_delayed + ' new SKU'
+                    + (stats.new_sku_delayed !== 1 ? 's' : '') + ' excluded (within 4-week delay)</div>';
+            }
+            if (stats.sunset_excluded && stats.sunset_excluded > 0) {
+                html += '<div class="sku-meta">' + stats.sunset_excluded + ' sunset SKU'
+                    + (stats.sunset_excluded !== 1 ? 's' : '') + ' excluded</div>';
+            }
+            html += '</div>';
+        } else {
+            html += '<div class="sku-empty-block">No SKUs available for assignment. Possible reasons: '
+                + 'Top Sellers file missing (upload via Database tab), all SKUs are sunset, '
+                + 'or all SKUs are within the new-SKU delay window.</div>';
+        }
+
+        /* --- Publish button --- */
+        if (hasData) {
+            html += '<div class="sku-publish-bar">';
+            html += '<button class="sku-btn-publish" id="sku-publish-btn" onclick="_skuPublish()">'
+                + 'Save &amp; Publish for Week of ' + _esc(dateStrShort) + '</button>';
+            html += '</div>';
+        }
+
+        /* --- Preview table --- */
+        if (hasData) {
+            html += '<div style="overflow-x:auto;">';
+            html += '<table class="hq-table" id="sku-preview-table">';
+            html += '<thead><tr>'
+                + '<th style="width:32px;">#</th>'
+                + '<th>SKU</th>'
+                + '<th>Description</th>'
+                + '<th style="text-align:right;">Rank</th>'
+                + '<th style="text-align:right;">Sales Score</th>'
+                + '<th style="text-align:right;">Last Counted</th>'
+                + '<th style="text-align:right;">Time Score</th>'
+                + '<th style="text-align:right;">Composite</th>'
+                + '<th style="min-width:200px;">Reasoning</th>'
+                + '</tr></thead><tbody>';
+            sel.forEach(function (item, i) {
+                html += '<tr>'
+                    + '<td class="num">' + (i + 1) + '</td>'
+                    + '<td>' + _esc(item.sku) + '</td>'
+                    + '<td>' + _esc(item.description || '—') + '</td>'
+                    + '<td class="num">' + (item.rank != null ? _esc(String(item.rank)) : '—') + '</td>'
+                    + '<td class="num">' + _fmtNum(item.sales_score, 2) + '</td>'
+                    + '<td class="num">' + _lastCounted(item) + '</td>'
+                    + '<td class="num">' + _fmtNum(item.time_score, 2) + '</td>'
+                    + '<td class="composite">' + _fmtNum(item.composite_score, 2) + '</td>'
+                    + '<td class="reasoning">' + _esc(item.reasoning || '') + '</td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        /* --- Publish history --- */
+        html += '<hr style="margin:32px 0 24px;border:none;border-top:1px solid #e0e0e0;">';
+        html += '<div class="sku-history-heading">PUBLISH HISTORY</div>';
+        var histRows = _runs.slice(0, 10);
+        if (!histRows.length) {
+            html += '<div style="font-size:13px;color:#999;padding:8px 0;">No publish history yet.</div>';
+        } else {
+            html += '<div style="overflow-x:auto;">';
+            html += '<table class="hq-table"><thead><tr>'
+                + '<th>Run ID</th>'
+                + '<th>Triggered At</th>'
+                + '<th>Triggered By</th>'
+                + '<th>Target Week</th>'
+                + '<th style="text-align:right;">SKUs Selected</th>'
+                + '<th style="text-align:center;">Published</th>'
+                + '<th>Filename</th>'
+                + '</tr></thead><tbody>';
+            histRows.forEach(function (row) {
+                html += '<tr>'
+                    + '<td>' + _esc(String(row.run_id || '—')) + '</td>'
+                    + '<td style="white-space:nowrap;">' + _fmtTriggeredAt(row.triggered_at) + '</td>'
+                    + '<td>' + _esc(row.triggered_by || '—') + '</td>'
+                    + '<td>' + _esc(row.target_week_identifier || '—') + '</td>'
+                    + '<td style="text-align:right;">' + (row.skus_selected != null ? row.skus_selected : '—') + '</td>'
+                    + '<td style="text-align:center;">' + (row.published ? '✓ Yes' : 'No') + '</td>'
+                    + '<td>' + _esc(row.published_filename || '—') + '</td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        el.innerHTML = html;
+    }
+
+    /* -------------------------------------------------------------------------
+       Publish
+    ------------------------------------------------------------------------- */
+    window._skuPublish = function () {
+        var p     = _preview || {};
+        var stats = p.stats  || {};
+        var wid   = stats.target_week_identifier || p.target_week_identifier || '';
+        var dateStrShort = _parseWeekIdShort(wid);
+        var filename = 'SKUList_' + wid + '.csv';
+
+        var ok = confirm(
+            'Publish this 20-SKU list as ' + filename + '?\n'
+            + 'Studios will see this as their assigned list for the week of ' + dateStrShort + '.'
+        );
+        if (!ok) return;
+
+        var btn = document.getElementById('sku-publish-btn');
+        if (btn) btn.disabled = true;
+
+        fetch('/hq/sku-assignment/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+        .then(function (r) {
+            return r.json().then(function (data) {
+                return { ok: r.ok, data: data };
+            });
+        })
+        .then(function (res) {
+            if (res.ok && res.data.ok) {
+                var d = res.data;
+                _publishBannerHtml = '<div class="sku-banner-success">'
+                    + '✓ Published. ' + _esc(d.filename) + ' is now in the input folder. '
+                    + 'Run ID: ' + _esc(String(d.run_id)) + '.'
+                    + '</div>';
+                /* Refetch runs then preview */
+                fetch('/hq/sku-assignment/runs')
+                    .then(function (r) { return r.json(); })
+                    .then(function (rows) {
+                        _runs = rows || [];
+                        return fetch('/hq/sku-assignment/preview');
+                    })
+                    .then(function (r) { return r.json(); })
+                    .then(function (prev) {
+                        _preview = prev;
+                        _render();
+                    })
+                    .catch(function () { _render(); });
+            } else {
+                var msg = (res.data && res.data.error) ? res.data.error : 'Unknown error';
+                _publishBannerHtml = '<div class="sku-banner-error">Failed to publish: ' + _esc(msg) + '</div>';
+                _render();
+            }
+        })
+        .catch(function (err) {
+            _publishBannerHtml = '<div class="sku-banner-error">Failed to publish: ' + _esc(String(err)) + '</div>';
+            _render();
+        });
+    };
+
+    /* -------------------------------------------------------------------------
+       Init
+    ------------------------------------------------------------------------- */
+    _skuLoad();
+
+})();
+</script>

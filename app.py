@@ -2425,6 +2425,12 @@ def hq_section_studios():
     return render_template('fragments/studios.html', db_stores=db_stores, recon_status=recon_status, recon_data=recon_data)
 
 
+@app.route('/hq/section/sku-assignment')
+@hq_login_required
+def hq_section_sku_assignment():
+    return render_template('fragments/sku_assignment.html')
+
+
 @app.route('/hq/database/upload-msf', methods=['POST'])
 @hq_login_required
 def hq_database_upload_msf():
