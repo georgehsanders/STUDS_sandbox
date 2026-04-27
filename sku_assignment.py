@@ -54,22 +54,95 @@ def _load_top_sellers():
 
 def refresh_sku_first_seen():
     """
-    Walk the current master SKU list and INSERT OR IGNORE any SKU not yet
-    in sku_first_seen. Idempotent — safe to call repeatedly.
-    Returns the number of new rows inserted.
+    Walk the current master SKU list and ensure every SKU has a row in
+    sku_first_seen. Idempotent — safe to call repeatedly.
+
+    Two operating modes:
+      Bootstrap (COUNT == 0): bulk-insert all master SKUs with a historical
+        first_seen_at (today - 365 days) so they immediately pass the
+        new-SKU delay check. Pre-existing SKUs should never be penalised.
+      Ongoing (COUNT > 0): INSERT OR IGNORE any SKU not yet tracked, with
+        first_seen_at = CURRENT_TIMESTAMP. These are genuinely new SKUs
+        added to the master after bootstrap completed.
+
+    One-time migration: if the table looks like it was bootstrapped with
+    CURRENT_TIMESTAMP (>100 rows all inserted within the last 24 hours),
+    retroactively correct those timestamps to today - 365 days before
+    proceeding. This repairs the broken first-run behaviour from the
+    initial deployment.
+
+    Returns the number of new rows inserted (0 during migration-only runs).
     """
     master = _load_master_skus()
     if not master:
         return 0
+
+    today = date.today()
+    historical_ts = (datetime.now() - timedelta(days=365)).isoformat(sep=' ', timespec='seconds')
+
     conn = _get_db()
     inserted = 0
     try:
-        for sku in master:
-            cursor = conn.execute(
-                'INSERT OR IGNORE INTO sku_first_seen (sku) VALUES (?)', (sku.upper(),)
+        # ----------------------------------------------------------------
+        # One-time migration: detect and repair broken bootstrap
+        # (large bulk insert with CURRENT_TIMESTAMP within last 24 hours)
+        # ----------------------------------------------------------------
+        row = conn.execute('SELECT COUNT(*), MIN(first_seen_at) FROM sku_first_seen').fetchone()
+        total_rows = row[0]
+        earliest_ts = row[1]
+
+        if total_rows > 100 and earliest_ts:
+            try:
+                earliest_dt = datetime.fromisoformat(str(earliest_ts))
+                age_hours = (datetime.now() - earliest_dt).total_seconds() / 3600
+                if age_hours <= 24:
+                    # Looks like the broken bootstrap — fix in bulk
+                    cutoff = (datetime.now() - timedelta(hours=24)).isoformat(sep=' ', timespec='seconds')
+                    conn.execute(
+                        'UPDATE sku_first_seen SET first_seen_at = ? WHERE first_seen_at >= ?',
+                        (historical_ts, cutoff)
+                    )
+                    conn.commit()
+                    print(
+                        f'[refresh_sku_first_seen] migration: corrected {total_rows} rows '
+                        f'from broken bootstrap — set first_seen_at to {historical_ts}',
+                        file=sys.stderr
+                    )
+            except (ValueError, TypeError) as e:
+                print(f'[refresh_sku_first_seen] migration check error: {e}', file=sys.stderr)
+
+        # ----------------------------------------------------------------
+        # Re-read row count after potential migration
+        # ----------------------------------------------------------------
+        total_rows = conn.execute('SELECT COUNT(*) FROM sku_first_seen').fetchone()[0]
+
+        if total_rows == 0:
+            # Bootstrap mode: insert all master SKUs with historical timestamp
+            print(
+                f'[refresh_sku_first_seen] bootstrap: inserting {len(master)} SKUs '
+                f'with historical first_seen_at={historical_ts}',
+                file=sys.stderr
             )
-            inserted += cursor.rowcount
-        conn.commit()
+            conn.executemany(
+                'INSERT OR IGNORE INTO sku_first_seen (sku, first_seen_at) VALUES (?, ?)',
+                [(sku.upper(), historical_ts) for sku in master]
+            )
+            conn.commit()
+            inserted = len(master)
+        else:
+            # Ongoing mode: only insert genuinely new SKUs
+            for sku in master:
+                cursor = conn.execute(
+                    'INSERT OR IGNORE INTO sku_first_seen (sku) VALUES (?)', (sku.upper(),)
+                )
+                inserted += cursor.rowcount
+            if inserted:
+                conn.commit()
+                print(
+                    f'[refresh_sku_first_seen] ongoing: added {inserted} new SKU(s) to tracking',
+                    file=sys.stderr
+                )
+
     except Exception as e:
         print(f'[refresh_sku_first_seen] error: {e}', file=sys.stderr)
     finally:

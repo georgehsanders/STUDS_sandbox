@@ -458,6 +458,7 @@ def load_top_sellers():
     """
     path = os.path.join(DATABASE_DIR, 'master', 'Top_Sellers.csv')
     if not os.path.isfile(path):
+        print(f'[load_top_sellers] file not found at {path} — returning empty list', file=sys.stderr)
         return []
     results = []
     try:
