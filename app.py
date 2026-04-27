@@ -427,6 +427,38 @@ def load_sku_status():
     return result
 
 
+def load_top_sellers():
+    """
+    Reads /database/master/Top_Sellers.csv and returns a list of dicts:
+    [{"rank": int, "sku": str, "total_net_units": int, "total_net_sales_usd": int, "studios_with_sales": int}, ...]
+    Returns [] if file doesn't exist. SKUs uppercased.
+    Rows failing validation are skipped silently with stderr log.
+    """
+    path = os.path.join(DATABASE_DIR, 'master', 'Top_Sellers.csv')
+    if not os.path.isfile(path):
+        return []
+    results = []
+    try:
+        with open(path, newline='', encoding='utf-8-sig', errors='replace') as f:
+            reader = csv.DictReader(f)
+            for i, row in enumerate(reader, start=2):
+                try:
+                    rank = int(row.get('rank', '').strip())
+                    sku = row.get('sku', '').strip().upper()
+                    units = int(row.get('total_net_units', '').strip())
+                    sales = int(row.get('total_net_sales_usd', '').strip())
+                    studios = int(row.get('studios_with_sales', '').strip())
+                    if rank >= 1 and sku and units >= 0 and sales >= 0 and studios >= 0:
+                        results.append({'rank': rank, 'sku': sku, 'total_net_units': units, 'total_net_sales_usd': sales, 'studios_with_sales': studios})
+                    else:
+                        print(f'[load_top_sellers] row {i} skipped (validation): {dict(row)}', file=sys.stderr)
+                except (ValueError, KeyError) as e:
+                    print(f'[load_top_sellers] row {i} skipped ({e}): {dict(row)}', file=sys.stderr)
+    except Exception as e:
+        print(f'[load_top_sellers] error reading file: {e}', file=sys.stderr)
+    return results
+
+
 def load_sku_prices():
     """Load SKU_Prices.csv and return a dict of SKU (uppercase) -> retail_price (float)."""
     filepath = os.path.join(DATABASE_DIR, 'SKU_Prices.csv')
@@ -2331,11 +2363,25 @@ def hq_section_database():
     if os.path.isfile(prices_path):
         prices_count = len(load_sku_prices())
         prices_updated = datetime.fromtimestamp(os.path.getmtime(prices_path)).strftime('%Y-%m-%d %H:%M:%S')
+    top_sellers_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
+    top_sellers = load_top_sellers()
+    top_sellers_count = len(top_sellers)
+    top_sellers_exists = os.path.isfile(top_sellers_path)
+    top_sellers_last_updated = (
+        datetime.fromtimestamp(os.path.getmtime(top_sellers_path)).strftime('%Y-%m-%d %H:%M:%S')
+        if top_sellers_exists else 'N/A'
+    )
+    master_skus_set = set(master.keys())
+    unknown_top_seller_skus = sorted([r['sku'] for r in top_sellers if r['sku'] not in master_skus_set])
     return render_template('fragments/database.html',
                            msf_rows=msf_rows, msf_updated=msf_updated,
                            status_rows=status_rows, status_updated=status_updated,
                            prices_count=prices_count, prices_updated=prices_updated,
-                           image_count=image_count, orphaned=orphaned, missing=missing)
+                           image_count=image_count, orphaned=orphaned, missing=missing,
+                           top_sellers_count=top_sellers_count,
+                           top_sellers_exists=top_sellers_exists,
+                           top_sellers_last_updated=top_sellers_last_updated,
+                           unknown_top_seller_skus=unknown_top_seller_skus)
 
 
 @app.route('/hq/section/studios')
@@ -2381,6 +2427,96 @@ def hq_database_upload_sku_status():
         f.save(status_path)
         count = len(load_sku_status())
         flash(f'SKU Status file updated. {count} SKUs loaded.', 'success')
+    return redirect('/hq/?section=database')
+
+
+@app.route('/hq/database/upload-top-sellers', methods=['POST'])
+@hq_login_required
+def hq_database_upload_top_sellers():
+    top_sellers_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
+    f = request.files.get('top_sellers_file')
+    if not f or not f.filename:
+        return redirect('/hq/?section=database')
+    try:
+        raw = f.read().decode('utf-8-sig', errors='replace')
+    except Exception as e:
+        flash(f'Could not read uploaded file: {e}', 'error')
+        return redirect('/hq/?section=database')
+    reader = csv.DictReader(io.StringIO(raw))
+    expected_headers = ['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales']
+    actual_headers = [h.strip().lower() for h in (reader.fieldnames or [])]
+    if actual_headers != expected_headers:
+        flash(
+            f'Invalid header. Expected: {", ".join(expected_headers)}. Got: {", ".join(actual_headers) or "(none)"}.',
+            'error'
+        )
+        return redirect('/hq/?section=database')
+    row_errors = []
+    valid_rows = []
+    for i, row in enumerate(reader, start=2):
+        # Skip fully empty rows
+        if not any(v.strip() for v in row.values()):
+            continue
+        rank_str = row.get('rank', '').strip()
+        sku_str = row.get('sku', '').strip().upper()
+        units_str = row.get('total_net_units', '').strip()
+        sales_str = row.get('total_net_sales_usd', '').strip()
+        studios_str = row.get('studios_with_sales', '').strip()
+        # Validate rank
+        try:
+            rank = int(rank_str)
+            if rank < 1:
+                row_errors.append(f'Row {i}: rank must be >= 1 (got {rank_str!r}).')
+                continue
+        except ValueError:
+            row_errors.append(f'Row {i}: rank is not a valid integer (got {rank_str!r}).')
+            continue
+        # Validate sku
+        if not sku_str:
+            row_errors.append(f'Row {i}: sku is empty.')
+            continue
+        if len(sku_str.split()) != 1:
+            row_errors.append(f'Row {i}: sku contains whitespace (got {sku_str!r}).')
+            continue
+        # Validate total_net_units
+        try:
+            units = int(units_str)
+            if units < 0:
+                row_errors.append(f'Row {i}: total_net_units must be >= 0 (got {units_str!r}).')
+                continue
+        except ValueError:
+            row_errors.append(f'Row {i}: total_net_units is not a valid integer (got {units_str!r}).')
+            continue
+        # Validate total_net_sales_usd
+        try:
+            sales = int(sales_str)
+            if sales < 0:
+                row_errors.append(f'Row {i}: total_net_sales_usd must be >= 0 (got {sales_str!r}).')
+                continue
+        except ValueError:
+            row_errors.append(f'Row {i}: total_net_sales_usd is not a valid integer (got {sales_str!r}).')
+            continue
+        # Validate studios_with_sales
+        try:
+            studios = int(studios_str)
+            if studios < 0:
+                row_errors.append(f'Row {i}: studios_with_sales must be >= 0 (got {studios_str!r}).')
+                continue
+        except ValueError:
+            row_errors.append(f'Row {i}: studios_with_sales is not a valid integer (got {studios_str!r}).')
+            continue
+        valid_rows.append({'rank': rank, 'sku': sku_str, 'total_net_units': units, 'total_net_sales_usd': sales, 'studios_with_sales': studios})
+    if row_errors:
+        for msg in row_errors:
+            flash(msg, 'error')
+        return redirect('/hq/?section=database')
+    archive_file_if_exists(top_sellers_path, 'top_sellers')
+    os.makedirs(MASTER_DIR, exist_ok=True)
+    with open(top_sellers_path, 'w', newline='', encoding='utf-8') as out:
+        writer = csv.DictWriter(out, fieldnames=['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales'])
+        writer.writeheader()
+        writer.writerows(valid_rows)
+    flash(f'Top Sellers file updated. {len(valid_rows)} SKUs loaded.', 'success')
     return redirect('/hq/?section=database')
 
 
@@ -2956,6 +3092,82 @@ def hq_database():
                 count = len(load_sku_prices())
                 flash(f'SKU Prices file updated. {count} SKUs loaded.', 'success')
 
+        elif action == 'upload_top_sellers':
+            f = request.files.get('top_sellers_file')
+            if f and f.filename:
+                _ts_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
+                try:
+                    raw = f.read().decode('utf-8-sig', errors='replace')
+                except Exception as e:
+                    flash(f'Could not read uploaded file: {e}', 'error')
+                    return redirect(url_for('hq_database'))
+                _reader = csv.DictReader(io.StringIO(raw))
+                _expected = ['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales']
+                _actual = [h.strip().lower() for h in (_reader.fieldnames or [])]
+                if _actual != _expected:
+                    flash(f'Invalid header. Expected: {", ".join(_expected)}. Got: {", ".join(_actual) or "(none)"}.', 'error')
+                    return redirect(url_for('hq_database'))
+                _row_errors = []
+                _valid_rows = []
+                for _i, _row in enumerate(_reader, start=2):
+                    if not any(v.strip() for v in _row.values()):
+                        continue
+                    _rank_s = _row.get('rank', '').strip()
+                    _sku_s = _row.get('sku', '').strip().upper()
+                    _units_s = _row.get('total_net_units', '').strip()
+                    _sales_s = _row.get('total_net_sales_usd', '').strip()
+                    _studios_s = _row.get('studios_with_sales', '').strip()
+                    try:
+                        _rank = int(_rank_s)
+                        if _rank < 1:
+                            _row_errors.append(f'Row {_i}: rank must be >= 1 (got {_rank_s!r}).')
+                            continue
+                    except ValueError:
+                        _row_errors.append(f'Row {_i}: rank is not a valid integer (got {_rank_s!r}).')
+                        continue
+                    if not _sku_s:
+                        _row_errors.append(f'Row {_i}: sku is empty.')
+                        continue
+                    if len(_sku_s.split()) != 1:
+                        _row_errors.append(f'Row {_i}: sku contains whitespace (got {_sku_s!r}).')
+                        continue
+                    try:
+                        _units = int(_units_s)
+                        if _units < 0:
+                            _row_errors.append(f'Row {_i}: total_net_units must be >= 0 (got {_units_s!r}).')
+                            continue
+                    except ValueError:
+                        _row_errors.append(f'Row {_i}: total_net_units is not a valid integer (got {_units_s!r}).')
+                        continue
+                    try:
+                        _sales = int(_sales_s)
+                        if _sales < 0:
+                            _row_errors.append(f'Row {_i}: total_net_sales_usd must be >= 0 (got {_sales_s!r}).')
+                            continue
+                    except ValueError:
+                        _row_errors.append(f'Row {_i}: total_net_sales_usd is not a valid integer (got {_sales_s!r}).')
+                        continue
+                    try:
+                        _studios = int(_studios_s)
+                        if _studios < 0:
+                            _row_errors.append(f'Row {_i}: studios_with_sales must be >= 0 (got {_studios_s!r}).')
+                            continue
+                    except ValueError:
+                        _row_errors.append(f'Row {_i}: studios_with_sales is not a valid integer (got {_studios_s!r}).')
+                        continue
+                    _valid_rows.append({'rank': _rank, 'sku': _sku_s, 'total_net_units': _units, 'total_net_sales_usd': _sales, 'studios_with_sales': _studios})
+                if _row_errors:
+                    for _msg in _row_errors:
+                        flash(_msg, 'error')
+                    return redirect(url_for('hq_database'))
+                archive_file_if_exists(_ts_path, 'top_sellers')
+                os.makedirs(MASTER_DIR, exist_ok=True)
+                with open(_ts_path, 'w', newline='', encoding='utf-8') as _out:
+                    _writer = csv.DictWriter(_out, fieldnames=['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales'])
+                    _writer.writeheader()
+                    _writer.writerows(_valid_rows)
+                flash(f'Top Sellers file updated. {len(_valid_rows)} SKUs loaded.', 'success')
+
         elif action == 'upload_images':
             img_files = request.files.getlist('image_files')
             count = 0
@@ -3012,6 +3224,18 @@ def hq_database():
         prices_count = len(load_sku_prices())
         prices_updated = datetime.fromtimestamp(os.path.getmtime(prices_path)).strftime('%Y-%m-%d %H:%M:%S')
 
+    # Top Sellers file
+    top_sellers_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
+    top_sellers = load_top_sellers()
+    top_sellers_count = len(top_sellers)
+    top_sellers_exists = os.path.isfile(top_sellers_path)
+    top_sellers_last_updated = (
+        datetime.fromtimestamp(os.path.getmtime(top_sellers_path)).strftime('%Y-%m-%d %H:%M:%S')
+        if top_sellers_exists else 'N/A'
+    )
+    master_skus_set = set(master.keys())
+    unknown_top_seller_skus = sorted([r['sku'] for r in top_sellers if r['sku'] not in master_skus_set])
+
     # Archive browser
     archives = [dict(r) for r in conn.execute(
         "SELECT id, file_type, original_filename, store_id, archived_at, row_count, file_size_bytes FROM archive_files ORDER BY archived_at DESC LIMIT 50"
@@ -3025,7 +3249,11 @@ def hq_database():
                            image_count=image_count,
                            orphaned=orphaned, missing=missing,
                            archives=archives,
-                           diff_added=diff_added, diff_removed=diff_removed)
+                           diff_added=diff_added, diff_removed=diff_removed,
+                           top_sellers_count=top_sellers_count,
+                           top_sellers_exists=top_sellers_exists,
+                           top_sellers_last_updated=top_sellers_last_updated,
+                           unknown_top_seller_skus=unknown_top_seller_skus)
 
 
 @app.route('/hq/database/assign-image', methods=['POST'])

@@ -18,6 +18,31 @@
     </form>
 </div>
 
+<!-- Top Sellers File -->
+<div class="hq-section">
+    <h2 class="hq-section-heading">Top Sellers File</h2>
+    <p class="hq-help-text">
+        {% if top_sellers_exists %}Top_Sellers.csv — {{ top_sellers_count }} SKUs — Last updated: {{ top_sellers_last_updated }}{% else %}No file uploaded yet.{% endif %}
+    </p>
+    {% if top_sellers_exists and unknown_top_seller_skus %}
+    <div style="background:#fffbeb;border:1px solid #d97706;border-radius:6px;padding:12px 16px;margin-bottom:12px;color:#92400e;">
+        <p style="margin:0 0 8px 0;">&#9888;&#65039; {{ unknown_top_seller_skus|length }} SKU{{ 's' if unknown_top_seller_skus|length != 1 else '' }} in the top sellers file are not in the master SKU list. They will be ignored by the assignment algorithm until added to the master:</p>
+        <ul style="margin:0;padding-left:20px;">
+            {% for sku in unknown_top_seller_skus[:20] %}
+            <li><code>{{ sku }}</code></li>
+            {% endfor %}
+            {% if unknown_top_seller_skus|length > 20 %}
+            <li style="list-style:none;font-style:italic;">... and {{ unknown_top_seller_skus|length - 20 }} more</li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+    <form method="POST" action="/hq/database/upload-top-sellers" enctype="multipart/form-data" class="hq-upload-form">
+        <input type="file" name="top_sellers_file" accept=".csv" required>
+        <button type="submit" class="hq-btn hq-btn-lavender">UPLOAD</button>
+    </form>
+</div>
+
 <!-- SKU Prices File -->
 <div class="hq-section">
     <h2 class="hq-section-heading">SKU Prices File</h2>
