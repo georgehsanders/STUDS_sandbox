@@ -13,6 +13,7 @@ import pytz
 from flask import (Flask, render_template, jsonify, request, redirect,
                    url_for, session, send_file, send_from_directory, flash)
 import analytics_begin_count
+import sku_assignment as _sku_assignment
 from reconcile import (
     INPUT_DIR, STATUS_UPDATED, STATUS_DISCREPANCY, STATUS_INCOMPLETE,
     STATUS_INCOMPLETE_FORMAT, RE_SKU_LIST, RE_VARIANCE, RE_AUDIT_TRAIL,
@@ -277,6 +278,27 @@ def init_store_db():
         matched         INTEGER,
         created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS sku_first_seen (
+        sku TEXT PRIMARY KEY,
+        first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS sku_assignment_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        triggered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        triggered_by_username TEXT,
+        target_week_identifier TEXT,
+        selected_skus_json TEXT,
+        selected_skus_count INTEGER,
+        published BOOLEAN NOT NULL DEFAULT 0,
+        published_at TIMESTAMP,
+        published_filename TEXT,
+        weight_sales REAL NOT NULL,
+        weight_time REAL NOT NULL,
+        new_sku_delay_weeks INTEGER NOT NULL,
+        target_list_size INTEGER NOT NULL,
+        notes TEXT
+    )''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_stock_check_skus_sku ON stock_check_skus(sku)')
     conn.commit()
     # Data migration: replace dummy studios with real list (idempotent)
     migrate_to_real_studios(conn)
@@ -3290,6 +3312,82 @@ def hq_mark_discontinued():
         conn.close()
         flash(f'Flagged as discontinued: {image_filename}', 'success')
     return redirect(url_for('hq_database'))
+
+
+@app.route('/hq/sku-assignment/preview')
+@hq_login_required
+def hq_sku_assignment_preview():
+    """Return JSON preview of the proposed SKU assignment for next Monday. Read-only."""
+    import json as _json
+    week_id = _sku_assignment.next_monday_week_identifier()
+    result = _sku_assignment.generate_assignment(week_id)
+    return app.response_class(
+        response=_json.dumps(result, indent=2, default=str),
+        status=200,
+        mimetype='application/json'
+    )
+
+
+@app.route('/hq/sku-assignment/publish', methods=['POST'])
+@hq_login_required
+def hq_sku_assignment_publish():
+    """Generate, write to disk, and record a published assignment run."""
+    import json as _json
+    body = request.get_json(silent=True) or {}
+    week_id = body.get('target_week_identifier') or _sku_assignment.next_monday_week_identifier()
+
+    result = _sku_assignment.generate_assignment(week_id)
+
+    try:
+        filepath = _sku_assignment.write_skulist_file(week_id, result['selected'])
+    except Exception as e:
+        return app.response_class(
+            response=_json.dumps({'ok': False, 'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
+
+    triggered_by = session.get('display_name') or 'unknown'
+    run_id = _sku_assignment.record_assignment_run(
+        result,
+        triggered_by_username=triggered_by,
+        published=True,
+        published_at=datetime.now(timezone.utc),
+        published_filename=os.path.basename(filepath)
+    )
+
+    return app.response_class(
+        response=_json.dumps({
+            'ok': True,
+            'filename': os.path.basename(filepath),
+            'week_identifier': week_id,
+            'skus': [s['sku'] for s in result['selected']],
+            'run_id': run_id,
+            'stats': result['stats'],
+        }, default=str),
+        status=200,
+        mimetype='application/json'
+    )
+
+
+@app.route('/hq/sku-assignment/runs')
+@hq_login_required
+def hq_sku_assignment_runs():
+    """Return JSON list of the last 20 assignment run audit rows."""
+    import json as _json
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            '''SELECT * FROM sku_assignment_runs ORDER BY triggered_at DESC LIMIT 20'''
+        ).fetchall()
+        data = [dict(r) for r in rows]
+    finally:
+        conn.close()
+    return app.response_class(
+        response=_json.dumps(data, indent=2, default=str),
+        status=200,
+        mimetype='application/json'
+    )
 
 
 init_store_db()
