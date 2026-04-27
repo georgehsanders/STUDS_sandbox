@@ -994,6 +994,359 @@ Structure: `.hq-analytics-subnav` div (hoisted into sticky header by `loadSectio
 
 ---
 
+### Start Your Stock Check — Feature Flag
+
+**What was built:** A boolean constant `SHOW_START_STOCK_CHECK` at the top of `app.py` controls whether the legacy "Start Your Stock Check" button is rendered on the Studio homepage.
+
+- Constant: `SHOW_START_STOCK_CHECK` (line ~56 in `app.py`)
+- When `False`: the button is hidden; studios see only BEGIN COUNT
+- When `True`: the button is rendered (current value — re-enabled after initial hide)
+- Passed to `GET /studio/` as `show_start_stock_check` template variable
+- Template conditionally renders the button: `{% if show_start_stock_check %} … {% endif %}`
+- Intent: allows HQ to suppress the legacy flow while Begin Count is validated in production, then re-enable with a one-line code change
+
+**Files touched:** `app.py`, `templates/studio.html`
+
+---
+
+### Studio Homepage Welcome Message
+
+**What was built:** A personalized welcome message displayed on the Studio homepage below the header.
+
+**Content:** `"Hey, {neighborhood}. Below are your assigned SKUs for Week {N}. Hit 'Begin Count' to start."`
+
+**`parse_neighborhood(store_name)` helper in `app.py`:** Extracts the neighborhood/location label from a full store name string. Returns the store name as-is if parsing finds no recognizable pattern (safe fallback).
+
+**Week number:** `date.today().isocalendar()[1]` — the current ISO calendar week number (1–53). Computed at request time in `GET /studio/` and passed as `welcome_week_number`.
+
+**Visual treatment:** Font size increased ~15–20% above base body size; `white-space: nowrap` and overflow handling so the greeting stays on one line; prominent placement above the SKU grid.
+
+**Files touched:** `app.py`, `templates/studio.html`
+
+---
+
+### Damage-Adjustment Warning Interstitial (Begin Count)
+
+**What was built:** A new screen inserted between the intro screen and Step 1 in the Begin Count flow. It is not a numbered step and does not trigger any DB writes or timer start.
+
+**User flow:** Intro → Warning screen → (confirm) → Step 1 (DB row created, timer starts)
+
+**Warning screen (`#step-warning`):**
+- Heading: "Before You Begin"
+- Amber warning box (`#fef3c7` background, `#d97706` border): *"! WARNING ! All unprocessed damages MUST be adjusted in Brightpearl prior to proceeding to the next step or your Stock Check counts will be inaccurate."*
+- Lavender confirm button (`#e8b4f8`): full acknowledgment sentence — *"I confirm that I understand and have made all necessary damage adjustments in Brightpearl. I'm ready to continue my Weekly Stock Check."*
+- Back link (gray, underlined): returns to intro without side effects
+
+**Navigation functions added to `studio_tutorial.html`:**
+
+| Function | Behavior |
+|---|---|
+| `goToWarning()` | Shows `#step-warning`; does NOT call `saveStep()`; `currentClientStep` stays 0; step indicator stays hidden |
+| `confirmWarning()` | Calls `goToStep('step-1')` — this is when the DB row is created and the timer starts |
+| `backToIntro()` | Shows `#step-intro`; calls `onCounterNameInput()` to re-evaluate button gate; no step-counter side effects |
+
+**`#step-warning` is not in `STEP_ID_TO_NUM`**: the warning screen is invisible to the step indicator and the analytics persistence hooks.
+
+**Files touched:** `templates/studio_tutorial.html`
+
+---
+
+### Step 3 — Print SKU List Button
+
+**What was built:** A "Print SKU List" button added to the Step 3 SKU reference grid screen inside the Begin Count wizard.
+
+**Implementation:** Scoped duplicates of the Studio main-page print logic (`handleStep3Print`, `executeStep3Print`) targeting `#step3-search` (search input) and `#step3-grid` (card grid) within Step 3. Avoids polluting the outer Studio page's `handlePrint`/`executePrint` functions.
+
+**Behavior:** Mirrors the studio main page print flow:
+- If no active search filter: calls `window.print()` immediately
+- If a search filter is active: shows a modal with "PRINT ALL [X] SKUS" and "PRINT [X] MATCHING SKUS" options
+
+**Step 3 body text** updated to reference the new button.
+
+**Files touched:** `templates/studio_tutorial.html`
+
+---
+
+### Step 4 — Per-Department Editable Columns
+
+**What was built:** The Step 4 variance table's single "Counted" input column was replaced with four per-department editable input columns, plus computed aggregate columns.
+
+**New column structure:**
+
+| Column | Type | Description |
+|---|---|---|
+| SKU | read-only | Uppercase SKU code |
+| Product Name | read-only | Description from master |
+| On-Hand | read-only | From Step 1 BP upload |
+| Accessory | editable input | Department count |
+| Bins & Backstock | editable input | Department count |
+| DCR/Piercing Room | editable input | Department count |
+| Visual Display | editable input | Department count |
+| Total Counted | computed | Sum of 4 department inputs |
+| Variance | computed | Total Counted − On-Hand |
+
+**Session structure:** `begin_count_oc_counted` is now nested: `{sku: {"Accessory": int, "Bins & Backstock": int, "DCR/Piercing Room": int, "Visual Display": int}}`. Each department value is stored separately.
+
+**DB storage:** Aggregate only — `stock_check_skus.counted = sum(dept_values)`. The per-department breakdown is session-only; not persisted to the DB.
+
+**`map_department_desc()` helper in `app.py`:** Maps the four department description strings to their short display labels for the column headers.
+
+**Backwards-compatible migration handler in `app.py`:** On session resume, if `begin_count_oc_counted` contains flat `{sku: int}` entries (old format), they are popped with a `stderr` log. This handles any in-flight sessions from before the schema change.
+
+**Step 7 crosscheck:** Reads `session['begin_count_oc_counted']` using `sum(dept_dict.values())` if the value is a dict, otherwise reads the int directly (flat-shape fallback).
+
+**Files touched:** `app.py`, `templates/studio_tutorial.html`
+
+---
+
+### Step 6 — Condensed Variance Summary
+
+**What was built:** The Step 6 screen, previously an instructional-only advance screen, now shows a condensed read-only variance summary table.
+
+**Table behavior:**
+- Shows only SKUs with non-zero variance (Counted ≠ On-Hand)
+- Sorted by absolute variance descending (largest discrepancies first)
+- Computed from the Step 4 department cells via `_step4DescMap` — reads the same session data as the Step 4 inputs
+- If all variances are zero, shows a "No variances detected." message instead of the table
+
+**Stale-render fix:** `renderStep6VarianceTable()` is called inside `goToStep('step-6')` (in addition to `DOMContentLoaded`) so the table always reflects the latest Step 4 data, even if the user navigated back and changed counts after the initial page load.
+
+**Step 6 body text** updated to describe the condensed table view.
+
+**Files touched:** `templates/studio_tutorial.html`
+
+---
+
+### Top Sellers CSV Upload (HQ Database)
+
+**What was built:** A new upload section in the HQ Database page for `Top_Sellers.csv` — the network-aggregated weekly top sellers data used by the SKU assignment algorithm.
+
+**UI (in `templates/fragments/database.html`):**
+- Positioned between "SKU Status File" and "SKU Prices File" sections
+- Status line: `"Top_Sellers.csv — N SKUs — Last updated: YYYY-MM-DD HH:MM:SS"` or `"No file uploaded yet."` if absent
+- Unknown-SKU warning block (amber: `#fffbeb` background, `#d97706` border): lists any SKUs in Top_Sellers.csv that are not in the master SKU file; those SKUs will be ignored by the assignment algorithm until added to the master. Capped at 20 visible SKUs with "…and N more" suffix.
+- Upload form posts to `POST /hq/database/upload-top-sellers`
+
+**Route: `POST /hq/database/upload-top-sellers`** (new)
+- Accepts `top_sellers_file` (CSV, `.csv` extension required)
+- Archives existing `Top_Sellers.csv` before overwrite (file_type `'top_sellers'`)
+- Saves to `MASTER_DIR/Top_Sellers.csv`
+- Flash message confirms count of SKUs loaded
+
+**`load_top_sellers()` in `app.py`:**
+- Reads `MASTER_DIR/Top_Sellers.csv`; returns `[]` if file absent (with `stderr` log on missing file)
+- Expected columns: `sku`, `rank` (integer)
+- Returns list of `(sku_uppercase, rank)` tuples sorted by rank ascending
+
+**`GET /hq/section/database` additions:** passes `top_sellers_exists`, `top_sellers_count`, `top_sellers_last_updated`, and `unknown_top_seller_skus` to the fragment.
+
+**Files touched:** `app.py`, `templates/fragments/database.html`
+
+---
+
+### SKU Assignment Automation Feature
+
+**Summary:** New 4th HQ tab "SKU ASSIGNMENT" providing a fully algorithm-driven weekly SKU list recommendation, with HQ override editing, Save & Publish, and a full audit trail with drill-down history. Replaces the manual SKUList upload workflow for weekly list generation.
+
+**Files touched:** `app.py`, `sku_assignment.py` (new module), `templates/hq_shell.html`, `templates/fragments/sku_assignment.html` (new fragment)
+
+---
+
+#### Algorithm (`sku_assignment.py`)
+
+**New module.** No `from app import …` — lazy imports only, avoids circular import.
+
+**Scoring formula:**
+
+```
+composite_score = (sales_score × 0.60) + (time_score × 0.40)
+```
+
+- `sales_score`: rank-based; derived from network-wide Top_Sellers ranking (rank 1 = 1.0, rank N = ~0.0; linear interpolation)
+- `time_score`: weeks since last counted (capped at 12); `min(weeks, 12) / 12`
+- Target list size: 20 (configurable constant `ASSIGNMENT_TARGET_LIST_SIZE`)
+- When Top_Sellers.csv is absent: `sales_score = 0` for all SKUs; time_score drives ranking entirely
+- Tiebreaker: alphabetical by SKU
+
+**Eligibility rules (applied before scoring):**
+
+| Rule | Effect |
+|---|---|
+| `status_map.get(sku) == 'active'` required | SKUs absent from SKU_Status.csv, or with any status other than `'active'`, are excluded (`inactive_excluded` counter) |
+| `status_map.get(sku) == 'sunset'` | Excluded and counted separately (`sunset_excluded` counter) |
+| `first_seen_at > today − 28 days` | New SKUs excluded for 4 weeks after first appearing in master (`new_sku_delayed` counter) |
+
+**`sku_first_seen` table:** Tracks when each SKU first appeared in the master. Bootstrap logic: on first run (empty table), all existing SKUs get `first_seen_at = now − 365 days` so they are immediately eligible. Migration guard: if >100 rows were all inserted within 24 hours (bulk bootstrap detected), bulk-updates them to `now − 365 days`. Ongoing: `INSERT OR IGNORE` uses `CURRENT_TIMESTAMP` for genuinely new SKUs.
+
+**`generate_assignment(week_id)` return shape:**
+
+```json
+{
+  "week_identifier": "MM-DD-YY",
+  "selected": [
+    {
+      "sku": "PS001ABC",
+      "description": "...",
+      "rank": 3,
+      "sales_score": 0.92,
+      "weeks_since_counted": 4,
+      "time_score": 0.33,
+      "composite": 0.686,
+      "reasoning": "Top seller (rank 3) + last counted 4 weeks ago"
+    }
+  ],
+  "stats": {
+    "eligible_pool_size": 287,
+    "sunset_excluded": 60,
+    "inactive_excluded": 800,
+    "new_sku_delayed": 3,
+    "total_master_skus": 1146
+  },
+  "top_sellers_missing": false
+}
+```
+
+**Reasoning strings** cover all combinations of: top seller vs. non-top-seller × never counted / counted this week / N weeks ago / 12+ weeks ago × top_sellers_missing flag. The `was_actually_counted = last_dt is not None` flag ensures "never counted" and "counted this week" are never conflated.
+
+---
+
+#### Database Schema Additions
+
+Two new tables added to `store_profiles.db` via `init_store_db()`:
+
+**`sku_first_seen`:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `sku` | TEXT PRIMARY KEY | Uppercase |
+| `first_seen_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+
+**`sku_assignment_runs`:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `triggered_at` | TIMESTAMP | |
+| `triggered_by_username` | TEXT | HQ session username |
+| `target_week_identifier` | TEXT | `MM-DD-YY` |
+| `selected_skus_json` | TEXT | JSON array of full detail objects (rank, scores, reasoning) |
+| `selected_skus_count` | INTEGER | |
+| `published` | BOOLEAN | DEFAULT 0 |
+| `published_at` | TIMESTAMP | |
+| `published_filename` | TEXT | Written SKUList filename |
+| `weight_sales` | REAL | Algorithm weight used |
+| `weight_time` | REAL | Algorithm weight used |
+| `new_sku_delay_weeks` | INTEGER | |
+| `target_list_size` | INTEGER | |
+| `notes` | TEXT | |
+| `had_overrides` | BOOLEAN | DEFAULT 0; added via idempotent `ALTER TABLE` |
+| `overrides_json` | TEXT | JSON with `added`, `removed`, `algorithm_original_skus`; added via idempotent `ALTER TABLE` |
+
+**Index:** `CREATE INDEX IF NOT EXISTS idx_stock_check_skus_sku ON stock_check_skus(sku)` — added for time-since-counted lookups.
+
+---
+
+#### API Endpoints
+
+| Route | Method | Description |
+|---|---|---|
+| `GET /hq/section/sku-assignment` | GET | Renders the SKU assignment fragment |
+| `GET /hq/sku-assignment/preview` | GET | Read-only; calls `generate_assignment()`; returns algorithm result JSON |
+| `POST /hq/sku-assignment/publish` | POST | Writes SKUList file, inserts audit row. Accepts optional `{"skus": [...]}` body for HQ override list |
+| `GET /hq/sku-assignment/runs` | GET | Publish history; supports `?month=YYYY-MM` and `?sku=SUBSTRING` filters; no row cap |
+| `GET /hq/sku-assignment/runs/months` | GET | Returns distinct `YYYY-MM` strings for the month filter dropdown |
+| `GET /hq/sku-assignment/searchable-skus` | GET | Returns all eligible `{sku, description}` entries for the override autocomplete |
+
+**Publish behavior details:**
+- If no `skus` key in body: publishes the algorithm's output exactly
+- If `skus` key present: validates each against master SKU list and `status='active'`; returns HTTP 400 with error if any are invalid
+- Diff computed against algorithm's output: `added_skus` (in client list, not in algo), `removed_skus` (in algo, not in client)
+- `had_overrides = True` if either list is non-empty
+- `overrides_json` stores `{added: [...], removed: [...], algorithm_original_skus: [...]}`
+- `selected_skus_json` stores full detail objects for drill-down (not just SKU strings)
+- Written file: `SKU_LIST_MM.DD.YY.csv` in `/input/`
+
+---
+
+#### HQ Shell Integration
+
+**4th nav tab added to `templates/hq_shell.html`:**
+```html
+<span class="hq-pipe">|</span>
+<a href="#" class="hq-section-link" data-section="sku-assignment" ...>SKU ASSIGNMENT</a>
+```
+Section nav now reads: ANALYTICS | DATABASE | STUDIOS | SKU ASSIGNMENT
+
+---
+
+#### HQ SKU Assignment UI (`templates/fragments/sku_assignment.html`)
+
+**Structure:** `.hq-analytics-subnav` (hoisted into sticky header by `loadSection()`) + `#sku-assignment-content` + single IIFE `<script>`.
+
+**State variables (IIFE-scoped):**
+
+| Variable | Description |
+|---|---|
+| `_preview` | Raw algorithm result from `/preview` |
+| `_runs` | Publish history rows from `/runs` |
+| `_eligibleSkus` | `[{sku, description}]` array from `/searchable-skus`; loaded once for autocomplete |
+| `_editedList` | Current in-memory SKU list (mutable; user edits apply here) |
+| `_originalList` | Algorithm's output list (immutable reference for diff display) |
+| `_publishBanner` | Success/error message string |
+| `_expandedRunId` | ID of the currently expanded drill-down row (or null) |
+| `_histMonths` | List of distinct YYYY-MM strings for the month filter dropdown |
+| `_histFilterMonth` | Currently selected month filter value |
+| `_histFilterSku` | Current SKU substring search string |
+
+**Preview section — stat boxes:**
+
+| Box | Shows |
+|---|---|
+| SELECTED | Count of SKUs in `_editedList`; "EDITED" chip appears if list differs from algorithm output |
+| ELIGIBLE | `stats.eligible_pool_size` |
+| SUNSET EXCLUDED | `stats.sunset_excluded` (hidden if 0) |
+| NOT ACTIVE EXCLUDED | `stats.inactive_excluded` (hidden if 0) |
+| NEW SKU DELAY | `stats.new_sku_delayed` (hidden if 0) |
+
+**Editable preview list:**
+- Each SKU row shows: rank, SKU, description, sales score, time score, composite, reasoning
+- × button on each row calls `_skuRemove(sku)` — removes from `_editedList`, triggers `_render()`
+- Empty list disables the Save & Publish button
+
+**"+ Add SKU" override input:**
+- Text input at the bottom of the preview table
+- `oninput` calls `_skuAddFilter()` — client-side filters `_eligibleSkus` (excluding already-listed SKUs), shows dropdown of up to 10 matches
+- Clicking a dropdown item calls `_skuAddSelect(sku, description)` — appends to `_editedList` with `reasoning: "Added by HQ override"`, triggers `_render()`
+- Blur with 180ms delay allows `mousedown` on dropdown items before hiding
+
+**Save & Publish button:**
+- Label: `"SAVE & PUBLISH (N SKUs)"` where N is current `_editedList.length`
+- Disabled when `_editedList` is empty
+- Confirm dialog text is context-aware:
+  - No overrides: standard confirmation
+  - With overrides: includes `"You've added X SKUs and removed Y SKUs from the algorithm's recommendation."`
+- On confirm: `POST /hq/sku-assignment/publish` with `{skus: [...]}` body only if list differs from algorithm output
+- On success: sets `_publishBanner`, reloads history via `_histFetch()`
+
+**Publish History:**
+- Month filter dropdown (populated from `/runs/months`; default "All months")
+- SKU substring search input (300ms debounce)
+- Filters are AND-combined; changing either re-fetches from `/runs?month=...&sku=...`
+- Table columns: Week of | Triggered | By | SKUs | File | Status | Edited (✎ chip if `had_overrides`)
+- Clicking a row expands inline drill-down (clicking again collapses)
+
+**Drill-down (`_renderDrill(row)`):**
+- 4 algorithm context boxes: Sales Weight | Time Weight | Target List Size | New SKU Delay
+- "HQ Override Applied" callout (lavender tint `#f8f0ff`, left border `#e8b4f8`) — only shown if `had_overrides=true`:
+  - Lists added SKUs (with descriptions)
+  - Lists removed SKUs (with descriptions)
+- Full per-SKU table from that run (rank, description, scores, reasoning); SKU text highlighted if `_histFilterSku` is active
+- Table data sourced from `selected_skus_json` (full detail objects); gracefully handles old rows that stored plain SKU strings
+
+**Styling:** Matches HQ Analytics visual language — `hq-table`, `hq-btn hq-btn-lavender`, `hq-section`, stat box styling, `hq-subsection-heading`.
+
+---
+
 ### Known Issues
 
 #### KI-1: HQ Analytics range selector resets on sub-tab switch
@@ -1009,5 +1362,19 @@ Structure: `.hq-analytics-subnav` div (hoisted into sticky header by `loadSectio
 **Suggested investigation:** Add a `MutationObserver` on `#hq-header-subnav` plus `console.log` instrumentation in `_aTabSwitch` to trace exactly what DOM mutations occur between the range change and the next sub-tab click. Code-reading alone has not been sufficient to locate the root cause.
 
 **Files involved:** `templates/fragments/analytics.html` (JS IIFE), `templates/hq_shell.html` (`loadSection()` hoist logic)
+
+**Resolution:** Deferred.
+
+---
+
+#### KI-2: SKU Assignment Publish History "By" column shows "unknown"
+
+**Symptom:** The "By" column in the SKU Assignment publish history table shows "unknown" for every publish run, regardless of which HQ user triggered the publish.
+
+**Root cause:** The `POST /hq/sku-assignment/publish` endpoint is not reading `session.get('display_name')` (or the equivalent HQ username key) when inserting the `sku_assignment_runs` row. The `triggered_by_username` column is written as `None` / empty.
+
+**Impact:** Cosmetic only. The run data, SKU list, and override metadata are all stored correctly; only the attribution column is blank.
+
+**Files involved:** `app.py` (`hq_sku_assignment_publish()`)
 
 **Resolution:** Deferred.
