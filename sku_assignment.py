@@ -317,20 +317,34 @@ def generate_assignment(target_week_identifier, weight_overrides=None):
         fs_date_obj = fs_dt.date() if fs_dt else today
         sku_age_weeks = round((today - fs_date_obj).days / 7.0)
 
+        was_actually_counted = last_dt is not None
+
         if top_sellers_missing:
-            if last_dt is None:
+            if not was_actually_counted:
                 reasoning = "Top sellers file missing — never counted in current system"
+            elif weeks_since_rounded <= 0.5:
+                reasoning = "Top sellers file missing — counted this week"
+            elif weeks_since >= 12:
+                reasoning = "Top sellers file missing — last counted 12+ weeks ago"
             else:
                 reasoning = f"Top sellers file missing — last counted {weeks_int} week{'s' if weeks_int != 1 else ''} ago"
         else:
-            if rank is not None and last_dt is not None and weeks_since_rounded > 0.5:
-                reasoning = f"Top seller (rank {rank}) + last counted {weeks_int} week{'s' if weeks_int != 1 else ''} ago"
-            elif rank is not None and (last_dt is None or weeks_since_rounded <= 0.5):
+            if rank is not None and not was_actually_counted:
+                reasoning = f"Top seller (rank {rank}), never counted in current system"
+            elif rank is not None and weeks_since_rounded <= 0.5:
                 reasoning = f"Top seller (rank {rank}), counted this week"
-            elif rank is None and last_dt is not None:
-                reasoning = f"Not in top sellers, last counted {weeks_int} week{'s' if weeks_int != 1 else ''} ago"
-            else:
+            elif rank is not None and weeks_since >= 12:
+                reasoning = f"Top seller (rank {rank}) + last counted 12+ weeks ago"
+            elif rank is not None:
+                reasoning = f"Top seller (rank {rank}) + last counted {weeks_int} week{'s' if weeks_int != 1 else ''} ago"
+            elif rank is None and not was_actually_counted:
                 reasoning = "Not in top sellers, never counted in current system"
+            elif rank is None and weeks_since_rounded <= 0.5:
+                reasoning = "Not in top sellers, counted this week"
+            elif rank is None and weeks_since >= 12:
+                reasoning = "Not in top sellers, last counted 12+ weeks ago"
+            else:
+                reasoning = f"Not in top sellers, last counted {weeks_int} week{'s' if weeks_int != 1 else ''} ago"
 
         # Prepend new-SKU note if SKU is relatively new (within 2x the delay)
         if sku_age_weeks <= ASSIGNMENT_NEW_SKU_DELAY_WEEKS * 2:
