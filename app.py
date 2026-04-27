@@ -300,6 +300,17 @@ def init_store_db():
     )''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_stock_check_skus_sku ON stock_check_skus(sku)')
     conn.commit()
+    # Add override tracking columns to sku_assignment_runs (idempotent)
+    for _col_sql in [
+        "ALTER TABLE sku_assignment_runs ADD COLUMN had_overrides BOOLEAN NOT NULL DEFAULT 0",
+        "ALTER TABLE sku_assignment_runs ADD COLUMN overrides_json TEXT",
+    ]:
+        try:
+            conn.execute(_col_sql)
+            conn.commit()
+        except sqlite3.OperationalError as _e:
+            if 'duplicate column' not in str(_e).lower():
+                raise
     # Data migration: replace dummy studios with real list (idempotent)
     migrate_to_real_studios(conn)
     conn.commit()
@@ -3338,15 +3349,81 @@ def hq_sku_assignment_preview():
 @app.route('/hq/sku-assignment/publish', methods=['POST'])
 @hq_login_required
 def hq_sku_assignment_publish():
-    """Generate, write to disk, and record a published assignment run."""
+    """Generate, optionally apply HQ overrides, write to disk, and record a published run."""
     import json as _json
     body = request.get_json(silent=True) or {}
     week_id = body.get('target_week_identifier') or _sku_assignment.next_monday_week_identifier()
 
-    result = _sku_assignment.generate_assignment(week_id)
+    # Always run the algorithm for the canonical recommendation
+    algo_result = _sku_assignment.generate_assignment(week_id)
+    algo_skus_ordered = [s['sku'] for s in algo_result['selected']]
+    algo_detail_map   = {s['sku']: s for s in algo_result['selected']}
 
+    had_overrides = False
+    overrides_obj = None
+
+    client_skus = body.get('skus')  # list of SKU strings, or None
+
+    if client_skus is not None:
+        # Validate every SKU in the client list
+        master_skus  = load_master_skus()
+        status_map   = load_sku_status()
+        invalid_skus = [s for s in client_skus
+                        if s.upper() not in master_skus or status_map.get(s.upper()) != 'active']
+        if invalid_skus:
+            return app.response_class(
+                response=_json.dumps({
+                    'ok': False,
+                    'error': 'Cannot publish — these SKUs are not active or not in master: '
+                             + ', '.join(invalid_skus)
+                }),
+                status=400,
+                mimetype='application/json'
+            )
+
+        client_set = set(s.upper() for s in client_skus)
+        algo_set   = set(algo_skus_ordered)
+
+        added_skus   = [s for s in client_skus if s.upper() not in algo_set]
+        removed_skus = [s for s in algo_skus_ordered if s not in client_set]
+
+        had_overrides = bool(added_skus or removed_skus)
+
+        if had_overrides:
+            master_skus_map = load_master_skus()
+            overrides_obj = {
+                'added':   [{'sku': s, 'description': master_skus_map.get(s.upper(), '')} for s in added_skus],
+                'removed': [{'sku': s, 'description': master_skus_map.get(s.upper(), '')} for s in removed_skus],
+                'algorithm_original_skus': algo_skus_ordered,
+            }
+
+        # Build the final detail list for the published SKUs
+        final_selected = []
+        for s in client_skus:
+            su = s.upper()
+            if su in algo_detail_map:
+                final_selected.append(algo_detail_map[su])
+            else:
+                # HQ-added SKU not in algorithm output — minimal detail
+                final_selected.append({
+                    'sku': su,
+                    'description': load_master_skus().get(su, ''),
+                    'rank': None,
+                    'sales_score': None,
+                    'time_score': None,
+                    'composite_score': None,
+                    'weeks_since_counted': None,
+                    'reasoning': 'Added by HQ override',
+                })
+
+        result_for_publish = dict(algo_result)
+        result_for_publish['selected'] = final_selected
+    else:
+        result_for_publish = algo_result
+
+    # Write the file
     try:
-        filepath = _sku_assignment.write_skulist_file(week_id, result['selected'])
+        filepath = _sku_assignment.write_skulist_file(week_id, result_for_publish['selected'])
     except Exception as e:
         return app.response_class(
             response=_json.dumps({'ok': False, 'error': str(e)}),
@@ -3354,24 +3431,90 @@ def hq_sku_assignment_publish():
             mimetype='application/json'
         )
 
-    triggered_by = session.get('display_name') or 'unknown'
-    run_id = _sku_assignment.record_assignment_run(
-        result,
-        triggered_by_username=triggered_by,
-        published=True,
-        published_at=datetime.now(timezone.utc),
-        published_filename=os.path.basename(filepath)
-    )
+    # Record the run
+    triggered_by = session.get('display_name') or session.get('hq_username') or 'unknown'
+
+    conn = get_db()
+    try:
+        selected_skus_list = [s['sku'] for s in result_for_publish['selected']]
+        cursor = conn.execute(
+            '''INSERT INTO sku_assignment_runs
+               (triggered_by_username, target_week_identifier,
+                selected_skus_json, selected_skus_count,
+                published, published_at, published_filename,
+                weight_sales, weight_time,
+                new_sku_delay_weeks, target_list_size,
+                had_overrides, overrides_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                triggered_by,
+                week_id,
+                _json.dumps(result_for_publish['selected']),  # full detail objects
+                len(selected_skus_list),
+                1,
+                datetime.now(timezone.utc).isoformat(),
+                os.path.basename(filepath),
+                algo_result['weights']['sales'],
+                algo_result['weights']['time'],
+                algo_result['new_sku_delay_weeks'],
+                algo_result['target_list_size'],
+                1 if had_overrides else 0,
+                _json.dumps(overrides_obj) if overrides_obj else None,
+            )
+        )
+        conn.commit()
+        run_id = cursor.lastrowid
+    except Exception as e:
+        return app.response_class(
+            response=_json.dumps({'ok': False, 'error': f'DB error: {e}'}),
+            status=500,
+            mimetype='application/json'
+        )
+    finally:
+        conn.close()
 
     return app.response_class(
         response=_json.dumps({
             'ok': True,
             'filename': os.path.basename(filepath),
             'week_identifier': week_id,
-            'skus': [s['sku'] for s in result['selected']],
+            'skus': selected_skus_list,
             'run_id': run_id,
-            'stats': result['stats'],
+            'had_overrides': had_overrides,
+            'stats': algo_result['stats'],
         }, default=str),
+        status=200,
+        mimetype='application/json'
+    )
+
+
+@app.route('/hq/sku-assignment/runs/months')
+@hq_login_required
+def hq_sku_assignment_runs_months():
+    """Return distinct YYYY-MM strings from target_week_identifier, most recent first."""
+    import json as _json
+    import re as _re
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT DISTINCT target_week_identifier FROM sku_assignment_runs WHERE target_week_identifier IS NOT NULL'
+        ).fetchall()
+    finally:
+        conn.close()
+
+    months = set()
+    for r in rows:
+        wid = r['target_week_identifier']
+        # Parse MM-DD-YY
+        m = _re.match(r'^(\d{2})-(\d{2})-(\d{2})$', wid or '')
+        if m:
+            mm, dd, yy = m.group(1), m.group(2), m.group(3)
+            year = 2000 + int(yy)
+            months.add(f'{year}-{mm}')
+
+    sorted_months = sorted(months, reverse=True)
+    return app.response_class(
+        response=_json.dumps(sorted_months),
         status=200,
         mimetype='application/json'
     )
@@ -3380,18 +3523,115 @@ def hq_sku_assignment_publish():
 @app.route('/hq/sku-assignment/runs')
 @hq_login_required
 def hq_sku_assignment_runs():
-    """Return JSON list of the last 20 assignment run audit rows."""
-    import json as _json
+    """Return run audit rows with optional month= and sku= filters."""
+    import json as _json, re as _re
+    month_filter = request.args.get('month', '').strip()   # YYYY-MM
+    sku_filter   = request.args.get('sku',   '').strip().upper()
+
     conn = get_db()
     try:
         rows = conn.execute(
-            '''SELECT * FROM sku_assignment_runs ORDER BY triggered_at DESC LIMIT 20'''
+            'SELECT * FROM sku_assignment_runs ORDER BY triggered_at DESC'
         ).fetchall()
         data = [dict(r) for r in rows]
     finally:
         conn.close()
+
+    # Deserialize JSON fields and add derived fields
+    for row in data:
+        # selected_skus_full — deserialize selected_skus_json
+        raw = row.get('selected_skus_json')
+        if raw:
+            try:
+                row['selected_skus_full'] = _json.loads(raw)
+            except Exception:
+                row['selected_skus_full'] = []
+        else:
+            row['selected_skus_full'] = []
+
+        # overrides — deserialize overrides_json
+        raw_ov = row.get('overrides_json')
+        if raw_ov:
+            try:
+                row['overrides'] = _json.loads(raw_ov)
+            except Exception:
+                row['overrides'] = None
+        else:
+            row['overrides'] = None
+
+        # had_overrides as bool
+        row['had_overrides'] = bool(row.get('had_overrides', 0))
+
+    # Month filter — parse target_week_identifier MM-DD-YY
+    if month_filter:
+        m = _re.match(r'^(\d{4})-(\d{2})$', month_filter)
+        if m:
+            filter_year, filter_month = int(m.group(1)), int(m.group(2))
+            def _matches_month(row):
+                wid = row.get('target_week_identifier', '')
+                wm = _re.match(r'^(\d{2})-(\d{2})-(\d{2})$', wid or '')
+                if not wm:
+                    return False
+                mm, yy = int(wm.group(1)), 2000 + int(wm.group(3))
+                return (yy == filter_year and mm == filter_month)
+            data = [r for r in data if _matches_month(r)]
+
+    # SKU filter — substring match against selected_skus_full
+    if sku_filter:
+        def _matches_sku(row):
+            for item in row.get('selected_skus_full', []):
+                if isinstance(item, dict) and sku_filter in item.get('sku', '').upper():
+                    return True
+                if isinstance(item, str) and sku_filter in item.upper():
+                    return True
+            return False
+        data = [r for r in data if _matches_sku(r)]
+
     return app.response_class(
         response=_json.dumps(data, indent=2, default=str),
+        status=200,
+        mimetype='application/json'
+    )
+
+
+@app.route('/hq/sku-assignment/searchable-skus')
+@hq_login_required
+def hq_sku_assignment_searchable_skus():
+    """Return all eligible SKUs (active, in master, past new-SKU delay) for autocomplete."""
+    import json as _json
+    from datetime import timedelta
+
+    master = load_master_skus()
+    status_map = load_sku_status()
+    today = date.today()
+    new_sku_cutoff = today - timedelta(days=_sku_assignment.ASSIGNMENT_NEW_SKU_DELAY_WEEKS * 7)
+
+    conn = get_db()
+    try:
+        rows = conn.execute('SELECT sku, first_seen_at FROM sku_first_seen').fetchall()
+        first_seen = {}
+        for r in rows:
+            try:
+                from datetime import datetime as _dt
+                first_seen[r['sku'].upper()] = _dt.fromisoformat(str(r['first_seen_at']))
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+    result = []
+    for sku_raw, desc in master.items():
+        sku = sku_raw.upper()
+        if status_map.get(sku) != 'active':
+            continue
+        fs_dt = first_seen.get(sku)
+        if fs_dt and fs_dt.date() > new_sku_cutoff:
+            continue
+        result.append({'sku': sku, 'description': desc or ''})
+
+    result.sort(key=lambda x: x['sku'])
+    return app.response_class(
+        response=_json.dumps(result, default=str),
         status=200,
         mimetype='application/json'
     )
