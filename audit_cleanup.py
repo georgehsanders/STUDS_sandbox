@@ -264,9 +264,10 @@ def process_file(file_bytes, original_filename):
 
     surviving = []
     flagged   = []
-    total_input      = 0
-    filtered_out     = 0
+    total_input        = 0
+    filtered_out       = 0
     auto_cleaned_count = 0
+    violations         = {}   # {username: {missing_reason, custom_reason, multi_reason}}
 
     for raw in reader:
         total_input += 1
@@ -294,6 +295,23 @@ def process_file(file_bytes, original_filename):
         is_flagged = flag_type is not None
         if flag_detail.get("auto_cleaned"):
             auto_cleaned_count += 1
+
+        # ── Violations tracking ───────────────────────────────────────────────
+        # Case 3 (auto_cleaned duplicate) is intentionally NOT counted — those
+        # are accidental double-clicks, not deliberate process violations.
+        if flag_type in ("no_reason", "unknown", "suggestion", "combo"):
+            if username not in violations:
+                violations[username] = {
+                    "missing_reason": 0,
+                    "custom_reason":  0,
+                    "multi_reason":   0,
+                }
+            if flag_type == "no_reason":
+                violations[username]["missing_reason"] += 1
+            elif flag_type in ("unknown", "suggestion"):
+                violations[username]["custom_reason"] += 1
+            elif flag_type == "combo":
+                violations[username]["multi_reason"] += 1
 
         row = {
             "row_index":       row_index,
@@ -337,8 +355,9 @@ def process_file(file_bytes, original_filename):
             "flagged_count": len(flagged),
             "surviving":     len(surviving),
         },
-        "flagged": flagged,
-        "rows":    surviving,
+        "flagged":    flagged,
+        "rows":       surviving,
+        "violations": violations,
     }
 
 

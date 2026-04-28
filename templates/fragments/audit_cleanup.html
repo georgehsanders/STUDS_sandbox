@@ -60,6 +60,8 @@
     var _reviewMode     = null; // null (selector) | 'modal' | 'bulk'
     var _bulkSelections = {};   // {row_index (str): movement_type}
     var _bulkOvCheck    = false;
+    // Violations report
+    var _violations     = null; // {username: {missing_reason, custom_reason, multi_reason}}
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     function _esc(s) {
@@ -168,7 +170,9 @@
             'It also automatically fixes duplicate movement-type entries (for example “TheftTheft” becomes “Theft”), ' +
             'suggests the correct movement type when a studio enters a free-text reason that matches a known keyword, ' +
             'and flags any rows where two different movement types were entered together — ' +
-            'so you can confirm the right value before exporting.' +
+            'so you can confirm the right value before exporting. ' +
+            'After processing, you\'ll also see a per-user breakdown of who violated the three Brightpearl ' +
+            'adjustment rules so you can follow up directly.' +
             '</p>' +
             '</div>';
     }
@@ -179,7 +183,7 @@
         if (_state === 'processing') return _buildProcessing();
         // reviewing or complete
         var base = _buildSummary();
-        if (_state === 'complete') return base + _buildOverview() + _buildDownload();
+        if (_state === 'complete') return base + _buildOverview() + _buildViolations() + _buildDownload();
         // reviewing — route by mode
         if (_reviewMode === null)   return base + _buildReviewModeSelector();
         if (_reviewMode === 'bulk') return base + _buildBulkTable();
@@ -291,6 +295,98 @@
             '<span style="font-size:12px;color:#999;margin-left:16px;">' +
             _esc(_outputFilename(_result ? _result.original_filename : '')) +
             '</span>' +
+            '</div>';
+    }
+
+    // ── Adjustment Process Violations report ──────────────────────────────────
+    function _buildViolations() {
+        var monthLabel = _determineMonth(_resultRows || []).replace(' Net Adjustments', '');
+
+        // Build sorted rows from _violations dict
+        var rows = [];
+        var vdata = _violations || {};
+        Object.keys(vdata).forEach(function (user) {
+            var v = vdata[user];
+            var total = (v.missing_reason || 0) + (v.custom_reason || 0) + (v.multi_reason || 0);
+            if (total > 0) {
+                rows.push({
+                    user:           user,
+                    missing_reason: v.missing_reason || 0,
+                    custom_reason:  v.custom_reason  || 0,
+                    multi_reason:   v.multi_reason   || 0,
+                    total:          total,
+                });
+            }
+        });
+        rows.sort(function (a, b) { return b.total - a.total; });
+
+        var title = 'Adjustment Process Violations' + (monthLabel !== 'Net Adjustments' ? ' — ' + monthLabel : '');
+
+        var copyBtn =
+            '<button class="hq-btn hq-btn-white" id="atc-viol-copy-btn" ' +
+            'onclick="window._atcCopyViolations()" ' +
+            'style="height:28px;padding:0 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;">' +
+            'Copy Table' +
+            '</button>';
+
+        var headerRow =
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+            '<h2 class="hq-section-heading" style="margin-bottom:0;">' + _esc(title) + '</h2>' +
+            copyBtn +
+            '</div>' +
+            '<p style="font-size:12px;color:#777;font-style:italic;margin:0 0 14px 0;">' +
+            'Counts per user of the three Brightpearl adjustment rules: ' +
+            'Rule 1 — every adjustment must have a reason code; ' +
+            'Rule 2 — only use codes from the standard list (no custom typing); ' +
+            'Rule 3 — only one reason code per adjustment.' +
+            '</p>';
+
+        if (rows.length === 0) {
+            return '<div class="hq-section" style="margin-bottom:0;">' +
+                headerRow +
+                '<p style="font-size:13px;color:#2d6930;">' +
+                'No violations detected — every adjustment followed the process this month. 🎉' +
+                '</p>' +
+                '</div>';
+        }
+
+        // Totals row
+        var totMissing = rows.reduce(function (s, r) { return s + r.missing_reason; }, 0);
+        var totCustom  = rows.reduce(function (s, r) { return s + r.custom_reason;  }, 0);
+        var totMulti   = rows.reduce(function (s, r) { return s + r.multi_reason;   }, 0);
+        var totAll     = totMissing + totCustom + totMulti;
+
+        var dataRows = rows.map(function (r) {
+            return '<tr>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;">' + _esc(r.user) + '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + r.missing_reason.toLocaleString('en-US') + '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + r.custom_reason.toLocaleString('en-US')  + '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + r.multi_reason.toLocaleString('en-US')   + '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">' + r.total.toLocaleString('en-US') + '</td>' +
+                '</tr>';
+        }).join('');
+
+        var totalRow =
+            '<tr style="font-weight:600;">' +
+            '<td style="padding:10px 14px;font-size:13px;border-top:1.5px solid #000;">Total</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + totMissing.toLocaleString('en-US') + '</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + totCustom.toLocaleString('en-US')  + '</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + totMulti.toLocaleString('en-US')   + '</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;font-weight:600;">' + totAll.toLocaleString('en-US') + '</td>' +
+            '</tr>';
+
+        return '<div class="hq-section" style="margin-bottom:0;">' +
+            headerRow +
+            '<table class="hq-table">' +
+            '<thead><tr>' +
+            '<th>User</th>' +
+            '<th style="text-align:right;">Missing Reason Code</th>' +
+            '<th style="text-align:right;">Custom Reason Code</th>' +
+            '<th style="text-align:right;">Multiple Reason Codes</th>' +
+            '<th style="text-align:right;">Total Violations</th>' +
+            '</tr></thead>' +
+            '<tbody>' + dataRows + totalRow + '</tbody>' +
+            '</table>' +
             '</div>';
     }
 
@@ -664,6 +760,9 @@
                 // overview client-side.  Cache them here.
                 _resultRows = data.rows || [];
 
+                // Violations dict from the server — keyed by username
+                _violations = data.violations || {};
+
                 if (data.flagged && data.flagged.length > 0) {
                     _state = 'reviewing';
                     _reviewMode = null; // show mode selector before entering either flow
@@ -745,6 +844,7 @@
         _reviewMode     = null;
         _bulkSelections = {};
         _bulkOvCheck    = false;
+        _violations     = null;
         _render();
     };
 
@@ -852,6 +952,53 @@
             }).catch(function () {
                 _fallbackCopy(text);
             });
+        } else {
+            _fallbackCopy(text);
+        }
+    };
+
+    window._atcCopyViolations = function () {
+        var monthLabel  = _determineMonth(_resultRows || []).replace(' Net Adjustments', '');
+        var title       = 'Adjustment Process Violations' + (monthLabel !== 'Net Adjustments' ? ' — ' + monthLabel : '');
+        var vdata       = _violations || {};
+
+        var rows = [];
+        Object.keys(vdata).forEach(function (user) {
+            var v = vdata[user];
+            var total = (v.missing_reason || 0) + (v.custom_reason || 0) + (v.multi_reason || 0);
+            if (total > 0) {
+                rows.push({
+                    user:           user,
+                    missing_reason: v.missing_reason || 0,
+                    custom_reason:  v.custom_reason  || 0,
+                    multi_reason:   v.multi_reason   || 0,
+                    total:          total,
+                });
+            }
+        });
+        rows.sort(function (a, b) { return b.total - a.total; });
+
+        var lines = [];
+        lines.push(title);
+        lines.push(['User', 'Missing Reason Code', 'Custom Reason Code', 'Multiple Reason Codes', 'Total Violations'].join('\t'));
+        rows.forEach(function (r) {
+            lines.push([r.user, r.missing_reason, r.custom_reason, r.multi_reason, r.total].join('\t'));
+        });
+        var totMissing = rows.reduce(function (s, r) { return s + r.missing_reason; }, 0);
+        var totCustom  = rows.reduce(function (s, r) { return s + r.custom_reason;  }, 0);
+        var totMulti   = rows.reduce(function (s, r) { return s + r.multi_reason;   }, 0);
+        lines.push(['Total', totMissing, totCustom, totMulti, totMissing + totCustom + totMulti].join('\t'));
+
+        var text = lines.join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                var btn = document.getElementById('atc-viol-copy-btn');
+                if (btn) {
+                    var orig = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(function () { btn.textContent = orig; }, 1500);
+                }
+            }).catch(function () { _fallbackCopy(text); });
         } else {
             _fallbackCopy(text);
         }
