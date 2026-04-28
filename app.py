@@ -2442,6 +2442,94 @@ def hq_section_sku_assignment():
     return render_template('fragments/sku_assignment.html')
 
 
+# ── Audit Trail Cleanup ────────────────────────────────────────────────────────
+
+@app.route('/hq/section/audit-cleanup')
+@hq_login_required
+def hq_section_audit_cleanup():
+    return render_template('fragments/audit_cleanup.html')
+
+
+@app.route('/hq/audit-cleanup/process', methods=['POST'])
+@hq_login_required
+def hq_audit_cleanup_process():
+    import audit_cleanup as _ac
+    import tempfile
+    import json as _json
+
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'error': 'No file uploaded.'}), 400
+
+    # Clean up any previous temp file for this session
+    old_path = session.pop('audit_cleanup_temp', None)
+    if old_path and os.path.exists(old_path):
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
+
+    content = f.read()
+    result = _ac.process_file(content, f.filename)
+
+    if 'error' in result:
+        return jsonify({'error': result['error']}), 400
+
+    # Persist surviving rows to a temp file so the download endpoint can
+    # retrieve them without re-uploading the original file.
+    fd, tmp_path = tempfile.mkstemp(suffix='_atc_rows.json')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            _json.dump(result['rows'], fh, ensure_ascii=False)
+    except Exception:
+        os.close(fd)
+        raise
+
+    session['audit_cleanup_temp']     = tmp_path
+    session['audit_cleanup_filename'] = f.filename
+
+    return jsonify({
+        'original_filename': f.filename,
+        'summary':           result['summary'],
+        'flagged':           result['flagged'],
+    })
+
+
+@app.route('/hq/audit-cleanup/download', methods=['POST'])
+@hq_login_required
+def hq_audit_cleanup_download():
+    import audit_cleanup as _ac
+    import json as _json
+
+    tmp_path  = session.get('audit_cleanup_temp')
+    orig_name = session.get('audit_cleanup_filename', 'audit_trail.csv')
+
+    if not tmp_path or not os.path.exists(tmp_path):
+        return jsonify({
+            'error': 'Session expired or no processed file found. Please re-upload.'
+        }), 400
+
+    body            = request.get_json(silent=True) or {}
+    confirmed_types = body.get('confirmed_types', {})
+
+    with open(tmp_path, 'r', encoding='utf-8') as fh:
+        rows = _json.load(fh)
+
+    csv_bytes = _ac.generate_csv(rows, confirmed_types)
+
+    dot      = orig_name.rfind('.')
+    base     = orig_name[:dot] if dot >= 0 else orig_name
+    ext      = orig_name[dot:] if dot >= 0 else '.csv'
+    out_name = base + '_cleaned' + ext
+
+    return send_file(
+        io.BytesIO(csv_bytes),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=out_name,
+    )
+
+
 @app.route('/hq/database/upload-msf', methods=['POST'])
 @hq_login_required
 def hq_database_upload_msf():

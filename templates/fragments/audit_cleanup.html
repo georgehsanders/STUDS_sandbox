@@ -1,0 +1,556 @@
+<!-- HQ Audit Trail Cleanup fragment -->
+
+<div class="hq-analytics-subnav">
+    <div style="display:flex;align-items:center;width:100%;">
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:#999999;">AUDIT TRAIL CLEANUP</span>
+    </div>
+</div>
+
+<div id="atc-content" style="min-height:200px;"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    // ── Canonical types (mirror of audit_cleanup.py CANONICAL_TYPES) ─────────
+    var CANONICAL_TYPES = [
+        "Stock Check",
+        "Damaged - Contamination",
+        "Damaged - Defective/Incompatible Pin",
+        "Damaged - Quality Issue (Color/Size/Shape)",
+        "Damaged - Bent/Broken",
+        "Overselling",
+        "Purchase",
+        "Damaged - VM Tool/Display",
+        "Damaged - Missing/Loose Stone",
+        "TO Error",
+        "Reallocated Inv – Damaged",
+        "Piercing Room Saline",
+        "Lost & Found",
+        "System Error - Return",
+        "Damaged - Burnt",
+        "De-Kit",
+        "Damaged - Saline",
+        "Theft",
+        "Kit"
+    ];
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    var _state    = 'idle';   // 'idle' | 'processing' | 'reviewing' | 'complete'
+    var _result   = null;     // JSON from /process
+    var _confirmed = {};      // {row_index (str): movement_type}
+    var _flagIdx  = 0;        // index into _result.flagged
+    var _selType  = null;     // currently selected type in modal
+    var _ovCheck  = false;    // HQ Override checkbox state
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    function _esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function _thousands(n) {
+        return Math.abs(n).toLocaleString('en-US');
+    }
+
+    function _signed(n) {
+        n = parseInt(n, 10) || 0;
+        return (n >= 0 ? '+' : '−') + Math.abs(n).toLocaleString('en-US');
+    }
+
+    function _determineMonth(rows) {
+        var counts = {};
+        (rows || []).forEach(function (row) {
+            var d = row.date || '';
+            var m = d.match(/(\d{4})-(\d{2})/);
+            if (m) {
+                var key = m[1] + '-' + m[2];
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+        var best = null, bestN = 0;
+        Object.keys(counts).forEach(function (k) {
+            if (counts[k] > bestN) { bestN = counts[k]; best = k; }
+        });
+        if (!best) return 'Net Adjustments';
+        var parts = best.split('-');
+        var MONTHS = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+        return (MONTHS[parseInt(parts[1], 10) - 1] || 'Month') + ' ' + parts[0] + ' Net Adjustments';
+    }
+
+    function _computeOverview() {
+        var rows = _result ? _result.rows || [] : [];
+        // rows is not stored client-side after the server returns flagged rows only.
+        // We use _resultRows which we cache on process completion.
+        rows = _resultRows || [];
+        var agg = {};
+        rows.forEach(function (row) {
+            var type = row.flagged
+                ? (_confirmed[String(row.row_index)] || null)
+                : row.type_of_movement;
+            if (!type) return;
+            var qty = parseInt(row.quantity, 10) || 0;
+            if (!agg[type]) agg[type] = { net: 0, count: 0 };
+            agg[type].net   += qty;
+            agg[type].count += 1;
+        });
+        var items = Object.keys(agg).map(function (k) {
+            return { type: k, net: agg[k].net, count: agg[k].count };
+        });
+        items.sort(function (a, b) { return Math.abs(b.net) - Math.abs(a.net); });
+        return {
+            monthLabel: _determineMonth(rows),
+            items: items,
+            totalNet:   items.reduce(function (s, x) { return s + x.net; }, 0),
+            totalCount: items.reduce(function (s, x) { return s + x.count; }, 0),
+        };
+    }
+
+    // We need the full rows client-side for the overview computation.
+    // The server returns only flagged rows in the process response to keep the
+    // payload small.  We therefore ask the server to include all surviving rows
+    // so the client can compute the overview without a second round-trip.
+    // (_resultRows is populated when the process response arrives.)
+    var _resultRows = null;
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    function _render() {
+        var el = document.getElementById('atc-content');
+        if (!el) return;
+
+        var html = _buildInfoCard() + _buildBody();
+        if (_state === 'reviewing') html += _buildModal();
+        el.innerHTML = html;
+    }
+
+    // ── Info card ─────────────────────────────────────────────────────────────
+    function _buildInfoCard() {
+        return '<div class="hq-section" style="background:#f9f9f9;border-left:3px solid #e8b4f8;margin-top:24px;">' +
+            '<h2 class="hq-section-heading" style="margin-bottom:10px;">What this tool does</h2>' +
+            '<p style="font-size:13px;color:#444;line-height:1.65;margin:0 0 10px 0;">' +
+            'Upload your raw Brightpearl audit trail export and this tool will generate a cleaned version ' +
+            'for reporting on studio-level inventory adjustments. The cleaned file excludes:' +
+            '</p>' +
+            '<ul style="font-size:13px;color:#444;line-height:1.75;margin:0 0 10px 18px;padding:0;">' +
+            '<li>Shopify sales</li>' +
+            '<li>Warehouse activity from Whiplash Ecom and Whiplash Retail</li>' +
+            '<li>Warehouse-to-studio inventory transfers (both sides)</li>' +
+            '</ul>' +
+            '<p style="font-size:13px;color:#444;line-height:1.65;margin:0;">' +
+            'It also automatically fixes duplicate movement-type entries (for example “TheftTheft” becomes “Theft”) ' +
+            'and flags any rows where two different movement types were entered together so you can confirm ' +
+            'which one is correct before exporting.' +
+            '</p>' +
+            '</div>';
+    }
+
+    // ── Body (state-dependent) ────────────────────────────────────────────────
+    function _buildBody() {
+        if (_state === 'idle')       return _buildUploadZone();
+        if (_state === 'processing') return _buildProcessing();
+        // reviewing or complete
+        return _buildSummary() + (_state === 'complete' ? _buildOverview() + _buildDownload() : '');
+    }
+
+    function _buildUploadZone() {
+        return '<div class="hq-section" style="margin-top:0;">' +
+            '<h2 class="hq-section-heading">Upload Audit Trail</h2>' +
+            '<p class="hq-help-text">Raw Brightpearl export CSV (10 columns, typically ~85,000 rows). ' +
+            'Processing runs entirely in your session — nothing is saved to the database.</p>' +
+            '<div class="hq-upload-form">' +
+            '<input type="file" id="atc-file-input" accept=".csv" ' +
+            'onchange="window._atcFileSelect(this)">' +
+            '</div>' +
+            '</div>';
+    }
+
+    function _buildProcessing() {
+        return '<div class="hq-section" style="margin-top:0;">' +
+            '<p style="font-size:13px;color:#555;letter-spacing:0.03em;">' +
+            'Processing… this may take a few seconds for large files.' +
+            '</p>' +
+            '</div>';
+    }
+
+    function _buildSummary() {
+        var s = _result ? _result.summary : {};
+        var ti  = (s.total_input   || 0).toLocaleString('en-US');
+        var fo  = (s.filtered_out  || 0).toLocaleString('en-US');
+        var ac  = (s.auto_cleaned  || 0).toLocaleString('en-US');
+        var sv  = (s.surviving     || 0).toLocaleString('en-US');
+        var fc  = (s.flagged_count || 0).toLocaleString('en-US');
+
+        var flagLabel = _state === 'complete' ? 'Rows Reviewed' : 'Rows Flagged';
+        var flagColor = (s.flagged_count || 0) === 0 ? '#2d6930' : '#c05000';
+
+        return '<div style="display:flex;gap:0;border:1px solid #e0e0e0;margin-top:0;margin-bottom:24px;">' +
+            _statBox('Total Input',    ti,  '#f7f7f7') +
+            _statBox('Filtered Out',   fo,  '#f7f7f7') +
+            _statBox('Auto-Cleaned',   ac,  '#f7f7f7') +
+            _statBox('Surviving Rows', sv,  '#f7f7f7') +
+            _statBoxColor(flagLabel,   fc,  '#f7f7f7', flagColor) +
+            '</div>' +
+            '<p class="hq-help-text" style="margin-bottom:20px;">' +
+            'File: <strong>' + _esc(_result ? _result.original_filename : '') + '</strong>' +
+            (_state === 'reviewing' ? ' &mdash; resolve the flagged rows in the modal to enable export.' : '') +
+            '</p>';
+    }
+
+    function _statBox(label, value, bg) {
+        return _statBoxColor(label, value, bg, '#1a1a1a');
+    }
+    function _statBoxColor(label, value, bg, valueColor) {
+        return '<div style="flex:1;padding:18px 20px;border-right:1px solid #e0e0e0;background:' + bg + ';">' +
+            '<div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#999;margin-bottom:6px;">' + label + '</div>' +
+            '<div style="font-size:26px;font-weight:500;color:' + valueColor + ';">' + value + '</div>' +
+            '</div>';
+    }
+
+    function _buildOverview() {
+        var ov = _computeOverview();
+        var rows = ov.items;
+
+        var tableRows = rows.map(function (item) {
+            return '<tr>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;">' + _esc(item.type) + '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + _signed(item.net) + '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + _thousands(item.count) + '</td>' +
+                '</tr>';
+        }).join('');
+
+        var totalRow =
+            '<tr style="font-weight:600;">' +
+            '<td style="padding:10px 14px;font-size:13px;border-top:1.5px solid #000;">Total</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + _signed(ov.totalNet) + '</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + _thousands(ov.totalCount) + '</td>' +
+            '</tr>';
+
+        var copyBtn =
+            '<button class="hq-btn hq-btn-white" id="atc-copy-btn" ' +
+            'onclick="window._atcCopy()" ' +
+            'style="height:28px;padding:0 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;">' +
+            'Copy Table' +
+            '</button>';
+
+        return '<div class="hq-section" style="margin-bottom:0;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">' +
+            '<h2 class="hq-section-heading" style="margin-bottom:0;">' + _esc(ov.monthLabel) + '</h2>' +
+            copyBtn +
+            '</div>' +
+            '<table class="hq-table">' +
+            '<thead><tr>' +
+            '<th>Adjustment Type</th>' +
+            '<th style="text-align:right;">Net Units</th>' +
+            '<th style="text-align:right;"># of Adjustments</th>' +
+            '</tr></thead>' +
+            '<tbody>' + tableRows + totalRow + '</tbody>' +
+            '</table>' +
+            '</div>';
+    }
+
+    function _buildDownload() {
+        return '<div style="margin-top:20px;margin-bottom:32px;">' +
+            '<button class="hq-btn hq-btn-lavender" onclick="window._atcDownload()" ' +
+            'style="height:36px;padding:0 28px;font-size:13px;letter-spacing:0.08em;">' +
+            'Download Cleaned CSV' +
+            '</button>' +
+            '<span style="font-size:12px;color:#999;margin-left:16px;">' +
+            _esc(_outputFilename(_result ? _result.original_filename : '')) +
+            '</span>' +
+            '</div>';
+    }
+
+    function _outputFilename(orig) {
+        if (!orig) return '';
+        var dot = orig.lastIndexOf('.');
+        if (dot < 0) return orig + '_cleaned.csv';
+        return orig.substring(0, dot) + '_cleaned' + orig.substring(dot);
+    }
+
+    // ── Modal ─────────────────────────────────────────────────────────────────
+    function _buildModal() {
+        var flaggedRows = _result.flagged;
+        var row   = flaggedRows[_flagIdx];
+        var total = flaggedRows.length;
+        var prog  = 'Reviewing ' + (_flagIdx + 1) + ' of ' + total;
+
+        var detailGrid =
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px 20px;' +
+            'background:#f9f9f9;border:1px solid #e0e0e0;padding:16px 20px;margin-bottom:20px;">' +
+            _detailCell('Date',         row.date         || '—') +
+            _detailCell('SKU',          row.sku          || '—') +
+            _detailCell('Product Name', row.product_name || '—') +
+            _detailCell('Quantity',     row.quantity     || '—') +
+            _detailCell('Warehouse',    row.warehouse    || '—') +
+            _detailCell('Username',     row.username     || 'Unknown') +
+            '</div>';
+
+        var typeLabel = '<p style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;' +
+            'color:#999;margin:0 0 10px 0;">Type of Movement (select one)</p>';
+
+        var selectionHtml;
+        if (row.flag_type === 'combo') {
+            var optA = row.flag_detail ? row.flag_detail.option_a : '';
+            var optB = row.flag_detail ? row.flag_detail.option_b : '';
+            selectionHtml =
+                '<div style="display:flex;gap:12px;margin-bottom:20px;">' +
+                _typeBtn(optA) + _typeBtn(optB) +
+                '</div>';
+        } else {
+            // Dropdown variant (no_reason or unknown)
+            var helperText = '';
+            if (row.flag_type === 'no_reason') {
+                helperText = '<em style="font-size:12px;color:#888;display:block;margin-bottom:8px;">' +
+                    'No reason was logged for this adjustment — please select the correct movement type.' +
+                    '</em>';
+            } else {
+                var orig = (row.flag_detail && row.flag_detail.original) ? row.flag_detail.original : '';
+                helperText = '<em style="font-size:12px;color:#888;display:block;margin-bottom:8px;">' +
+                    'Could not auto-detect this value: <strong>' + _esc(orig) + '</strong>' +
+                    ' — please select the correct movement type.' +
+                    '</em>';
+            }
+            var options = CANONICAL_TYPES.map(function (t) {
+                return '<option value="' + _esc(t) + '">' + _esc(t) + '</option>';
+            }).join('');
+            selectionHtml = helperText +
+                '<div style="margin-bottom:20px;">' +
+                '<select id="atc-modal-dropdown" class="hq-input" ' +
+                'style="width:100%;max-width:400px;" ' +
+                'onchange="window._atcDropdownChange(this)">' +
+                '<option value="">-- Select movement type --</option>' +
+                options +
+                '</select>' +
+                '</div>';
+        }
+
+        var overrideCheck =
+            '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:20px;">' +
+            '<input type="checkbox" id="atc-modal-override" ' +
+            'onchange="window._atcCheckOverride(this)" ' +
+            'style="width:15px;height:15px;cursor:pointer;">' +
+            'HQ Override? Check yes to confirm' +
+            '</label>';
+
+        var confirmDisabled = !(_selType && _ovCheck);
+        var confirmBtn =
+            '<button class="hq-btn hq-btn-lavender" id="atc-confirm-btn" ' +
+            'onclick="window._atcConfirm()" ' +
+            (confirmDisabled ? 'disabled ' : '') +
+            'style="margin-right:10px;' + (confirmDisabled ? 'opacity:0.4;cursor:not-allowed;' : '') + '">' +
+            'Confirm and Next' +
+            '</button>' +
+            '<button class="hq-btn" onclick="window._atcCancel()">' +
+            'Cancel' +
+            '</button>';
+
+        return '<div class="hq-modal" id="atc-modal">' +
+            '<div class="hq-modal-content" style="width:640px;">' +
+            '<div class="hq-modal-header">' +
+            '<h2>Review Flagged Row</h2>' +
+            '<span style="font-size:12px;color:#999;font-weight:400;">' + _esc(prog) + '</span>' +
+            '</div>' +
+            '<div class="hq-modal-body">' +
+            detailGrid +
+            typeLabel +
+            selectionHtml +
+            overrideCheck +
+            '</div>' +
+            '<div class="hq-modal-footer">' + confirmBtn + '</div>' +
+            '</div>' +
+            '</div>';
+    }
+
+    function _detailCell(label, value) {
+        return '<div>' +
+            '<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#999;margin-bottom:3px;">' + label + '</div>' +
+            '<div style="font-size:13px;color:#1a1a1a;">' + _esc(value) + '</div>' +
+            '</div>';
+    }
+
+    function _typeBtn(type) {
+        var isSelected = (_selType === type);
+        return '<button class="_atc-type-btn hq-btn" ' +
+            'data-type="' + _esc(type) + '" ' +
+            'onclick="window._atcSelectType(' + JSON.stringify(type) + ')" ' +
+            'style="flex:1;height:auto;min-height:44px;padding:10px 16px;white-space:normal;text-align:left;' +
+            (isSelected ? 'background:#FFD700;font-weight:500;' : '') +
+            '">' +
+            _esc(type) +
+            '</button>';
+    }
+
+    // ── Event handlers (exported to window for inline onclick) ────────────────
+
+    window._atcFileSelect = function (input) {
+        if (!input || !input.files || !input.files[0]) return;
+        _state = 'processing';
+        _selType = null;
+        _ovCheck = false;
+        _render();
+
+        var fd = new FormData();
+        fd.append('file', input.files[0]);
+
+        fetch('/hq/audit-cleanup/process', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    _state = 'idle';
+                    _render();
+                    return;
+                }
+                _result    = data;
+                _confirmed = {};
+                _flagIdx   = 0;
+                _selType   = null;
+                _ovCheck   = false;
+
+                // The server returns all surviving rows so we can compute the
+                // overview client-side.  Cache them here.
+                _resultRows = data.rows || [];
+
+                _state = (data.flagged && data.flagged.length > 0) ? 'reviewing' : 'complete';
+                _render();
+            })
+            .catch(function (e) {
+                alert('Upload failed: ' + e);
+                _state = 'idle';
+                _render();
+            });
+    };
+
+    window._atcSelectType = function (type) {
+        _selType = type;
+        // Update button styles without a full re-render
+        document.querySelectorAll('._atc-type-btn').forEach(function (btn) {
+            btn.style.background = (btn.dataset.type === type) ? '#FFD700' : '#ffffff';
+            btn.style.fontWeight = (btn.dataset.type === type) ? '500' : '400';
+        });
+        _updateConfirmBtn();
+    };
+
+    window._atcDropdownChange = function (sel) {
+        _selType = sel.value || null;
+        _updateConfirmBtn();
+    };
+
+    window._atcCheckOverride = function (cb) {
+        _ovCheck = cb.checked;
+        _updateConfirmBtn();
+    };
+
+    function _updateConfirmBtn() {
+        var btn = document.getElementById('atc-confirm-btn');
+        if (!btn) return;
+        var ok = !!(_selType && _ovCheck);
+        btn.disabled = !ok;
+        btn.style.opacity = ok ? '1' : '0.4';
+        btn.style.cursor  = ok ? 'pointer' : 'not-allowed';
+    }
+
+    window._atcConfirm = function () {
+        if (!_selType || !_ovCheck) return;
+
+        var flaggedRows = _result.flagged;
+        var row = flaggedRows[_flagIdx];
+        _confirmed[String(row.row_index)] = _selType;
+
+        _flagIdx++;
+        _selType = null;
+        _ovCheck = false;
+
+        if (_flagIdx >= flaggedRows.length) {
+            // All flagged rows resolved
+            _state = 'complete';
+        }
+        _render();
+    };
+
+    window._atcCancel = function () {
+        _state      = 'idle';
+        _result     = null;
+        _resultRows = null;
+        _confirmed  = {};
+        _flagIdx    = 0;
+        _selType    = null;
+        _ovCheck    = false;
+        _render();
+    };
+
+    window._atcDownload = function () {
+        fetch('/hq/audit-cleanup/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirmed_types: _confirmed })
+        })
+        .then(function (r) {
+            if (!r.ok) {
+                return r.json().then(function (d) { throw new Error(d.error || 'Download failed'); });
+            }
+            return r.blob();
+        })
+        .then(function (blob) {
+            var url  = URL.createObjectURL(blob);
+            var link = document.createElement('a');
+            link.href = url;
+            link.download = _outputFilename(_result ? _result.original_filename : 'audit_trail.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        })
+        .catch(function (e) {
+            alert('Download error: ' + e.message);
+        });
+    };
+
+    window._atcCopy = function () {
+        var ov   = _computeOverview();
+        var lines = [];
+        lines.push(ov.monthLabel);
+        lines.push(['Adjustment Type', 'Net Units', '# of Adjustments'].join('\t'));
+        ov.items.forEach(function (item) {
+            lines.push([item.type, _signed(item.net), _thousands(item.count)].join('\t'));
+        });
+        lines.push(['Total', _signed(ov.totalNet), _thousands(ov.totalCount)].join('\t'));
+
+        var text = lines.join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                var btn = document.getElementById('atc-copy-btn');
+                if (btn) {
+                    var orig = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(function () { btn.textContent = orig; }, 1500);
+                }
+            }).catch(function () {
+                _fallbackCopy(text);
+            });
+        } else {
+            _fallbackCopy(text);
+        }
+    };
+
+    function _fallbackCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity  = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+        document.body.removeChild(ta);
+    }
+
+    // ── Bootstrap ─────────────────────────────────────────────────────────────
+    _render();
+
+})();
+</script>
