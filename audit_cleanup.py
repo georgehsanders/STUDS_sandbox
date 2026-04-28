@@ -24,6 +24,7 @@ CANONICAL_TYPES = [
     "Damaged - VM Tool/Display",
     "Damaged - Missing/Loose Stone",
     "TO Error",
+    "Inter-Studio Transfer (IST) Error",
     "Reallocated Inv – Damaged",   # en-dash (–)
     "Piercing Room Saline",
     "Lost & Found",
@@ -76,6 +77,8 @@ KEYWORD_MAP = [
              "Damaged - VM Tool/Display"),
     (False, ["system error"],
              "System Error - Return"),
+    (False, ["inter-studio", "inter studio", "ist error"],
+             "Inter-Studio Transfer (IST) Error"),
     (False, ["to error", "transfer error"],
              "TO Error"),
     (False, ["dekit", "de-kit", "de kit"],
