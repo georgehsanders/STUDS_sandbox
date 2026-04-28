@@ -84,10 +84,7 @@
     }
 
     function _computeOverview() {
-        var rows = _result ? _result.rows || [] : [];
-        // rows is not stored client-side after the server returns flagged rows only.
-        // We use _resultRows which we cache on process completion.
-        rows = _resultRows || [];
+        var rows = _resultRows || [];
         var agg = {};
         rows.forEach(function (row) {
             var type = row.flagged
@@ -111,11 +108,8 @@
         };
     }
 
-    // We need the full rows client-side for the overview computation.
-    // The server returns only flagged rows in the process response to keep the
-    // payload small.  We therefore ask the server to include all surviving rows
-    // so the client can compute the overview without a second round-trip.
-    // (_resultRows is populated when the process response arrives.)
+    // Slim surviving rows (row_index, flagged, type_of_movement, quantity, date)
+    // returned by the server alongside the flagged list.  Used by _computeOverview.
     var _resultRows = null;
 
     // ── Render ────────────────────────────────────────────────────────────────

@@ -2488,10 +2488,26 @@ def hq_audit_cleanup_process():
     session['audit_cleanup_temp']     = tmp_path
     session['audit_cleanup_filename'] = f.filename
 
+    # Send slim rows to the client for the client-side overview computation.
+    # The Reference field is omitted (often 200–400 chars per row) to keep
+    # the payload manageable.  The temp file above holds the full rows for
+    # the download endpoint.
+    slim_rows = [
+        {
+            'row_index':        r['row_index'],
+            'flagged':          r['flagged'],
+            'type_of_movement': r['type_of_movement'],
+            'quantity':         r['quantity'],
+            'date':             r['date'],
+        }
+        for r in result['rows']
+    ]
+
     return jsonify({
         'original_filename': f.filename,
         'summary':           result['summary'],
         'flagged':           result['flagged'],
+        'rows':              slim_rows,
     })
 
 
