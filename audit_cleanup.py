@@ -14,6 +14,7 @@ import re
 # order shown in the review-modal dropdown.
 CANONICAL_TYPES = [
     "Stock Check",
+    "Stock Update",
     "Damaged - Contamination",
     "Damaged - Defective/Incompatible Pin",
     "Damaged - Quality Issue (Color/Size/Shape)",
@@ -95,6 +96,8 @@ KEYWORD_MAP = [
              "Lost & Found"),
     (False, ["found"],
              "Lost & Found"),
+    (False, ["stock update"],
+             "Stock Update"),
     (False, ["recount", "stock check", "reconcile"],
              "Stock Check"),
     (False, ["saline"],
