@@ -375,12 +375,18 @@
 
     function _typeBtn(type) {
         var isSelected = (_selType === type);
-        return '<button class="_atc-type-btn hq-btn" ' +
+        // JSON.stringify produces double-quoted strings; _esc converts them to
+        // &quot; so they don't break the surrounding double-quoted HTML attribute.
+        return '<button class="atc-type-btn hq-btn" ' +
             'data-type="' + _esc(type) + '" ' +
-            'onclick="window._atcSelectType(' + JSON.stringify(type) + ')" ' +
-            'style="flex:1;height:auto;min-height:44px;padding:10px 16px;white-space:normal;text-align:left;' +
-            (isSelected ? 'background:#FFD700;font-weight:500;' : '') +
+            'onclick="window._atcSelectType(' + _esc(JSON.stringify(type)) + ')" ' +
+            'style="flex:1;height:auto;min-height:44px;padding:10px 16px;' +
+            'white-space:normal;text-align:left;transition:background 0.1s,border-color 0.1s;' +
+            (isSelected
+                ? 'background:#FFD700;border-color:#000;border-width:2.5px;font-weight:600;'
+                : 'background:#fff;border-color:#ccc;') +
             '">' +
+            (isSelected ? '&#10003;&nbsp;' : '') +
             _esc(type) +
             '</button>';
     }
@@ -428,10 +434,15 @@
 
     window._atcSelectType = function (type) {
         _selType = type;
-        // Update button styles without a full re-render
-        document.querySelectorAll('._atc-type-btn').forEach(function (btn) {
-            btn.style.background = (btn.dataset.type === type) ? '#FFD700' : '#ffffff';
-            btn.style.fontWeight = (btn.dataset.type === type) ? '500' : '400';
+        // Update button styles in-place without a full re-render
+        document.querySelectorAll('.atc-type-btn').forEach(function (btn) {
+            var sel = (btn.dataset.type === type);
+            btn.style.background   = sel ? '#FFD700' : '#ffffff';
+            btn.style.borderColor  = sel ? '#000'    : '#ccc';
+            btn.style.borderWidth  = sel ? '2.5px'   : '1.5px';
+            btn.style.fontWeight   = sel ? '600'     : '400';
+            // Checkmark prefix: rebuild text content
+            btn.textContent = (sel ? '✓ ' : '') + btn.dataset.type;
         });
         _updateConfirmBtn();
     };
