@@ -2508,6 +2508,7 @@ def hq_audit_cleanup_process():
         'summary':           result['summary'],
         'flagged':           result['flagged'],
         'rows':              slim_rows,
+        'violations':        result['violations'],
     })
 
 
