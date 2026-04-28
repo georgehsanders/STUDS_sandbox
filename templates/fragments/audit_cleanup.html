@@ -358,13 +358,13 @@
             var ri  = String(row.row_index);
             var sel = _bulkSelections[ri] || '';
 
-            // Icon marker — 🔀 combo, 💡 suggestion, ⚠️ no_reason/unknown
+            // Icon marker — 🔀 multi-reason, 💡 suggestion, ⚠️ no_reason/unknown
             var marker =
                 row.flag_type === 'combo'      ? '&#x1F500;' :
                 row.flag_type === 'suggestion' ? '&#x1F4A1;' :
                                                  '&#x26A0;&#xFE0F;';
             var markerTitle =
-                row.flag_type === 'combo'      ? 'Two movement types detected' :
+                row.flag_type === 'combo'      ? 'Multi-reason row — two movement types detected' :
                 row.flag_type === 'suggestion' ? 'Keyword match — suggestion pre-filled' :
                                                  'No movement type — please select';
 
@@ -443,7 +443,7 @@
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
             '<h2 class="hq-section-heading" style="margin-bottom:0;">All Flagged Rows</h2>' +
             '<span style="font-size:12px;color:#999;">' +
-            '&#x1F500; combo &nbsp;&nbsp; &#x1F4A1; suggestion &nbsp;&nbsp; &#x26A0; needs selection' +
+            '&#x1F500; multi-reason &nbsp;&nbsp; &#x1F4A1; suggestion &nbsp;&nbsp; &#x26A0; needs selection' +
             '</span>' +
             '</div>' +
             unresolvedNote +
