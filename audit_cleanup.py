@@ -305,13 +305,32 @@ def process_file(file_bytes, original_filename):
                     "missing_reason": 0,
                     "custom_reason":  0,
                     "multi_reason":   0,
+                    "rows":           [],
                 }
             if flag_type == "no_reason":
+                vtype       = "missing_reason"
+                orig_reason = "(no reason logged)"
                 violations[username]["missing_reason"] += 1
             elif flag_type in ("unknown", "suggestion"):
+                vtype       = "custom_reason"
+                orig_reason = flag_detail.get("original", "")
                 violations[username]["custom_reason"] += 1
-            elif flag_type == "combo":
+            else:  # combo
+                vtype       = "multi_reason"
+                orig_reason = flag_detail.get("original", "")
                 violations[username]["multi_reason"] += 1
+            # Strip timestamp for drilldown display (YYYY-MM-DD only)
+            raw_date     = raw[C_DATE]
+            display_date = raw_date.split(" ")[0] if raw_date else ""
+            violations[username]["rows"].append({
+                "date":            display_date,
+                "sku":             raw[C_SKU],
+                "product_name":    raw[C_PRODUCT_NAME],
+                "qty":             raw[C_QUANTITY],
+                "warehouse":       warehouse,
+                "original_reason": orig_reason,
+                "violation_type":  vtype,
+            })
 
         row = {
             "row_index":       row_index,

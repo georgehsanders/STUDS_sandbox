@@ -61,7 +61,8 @@
     var _bulkSelections = {};   // {row_index (str): movement_type}
     var _bulkOvCheck    = false;
     // Violations report
-    var _violations     = null; // {username: {missing_reason, custom_reason, multi_reason}}
+    var _violations     = null; // {username: {missing_reason, custom_reason, multi_reason, rows[]}}
+    var _violExpanded   = {};   // {username: bool} — which drilldowns are open
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     function _esc(s) {
@@ -302,7 +303,7 @@
     function _buildViolations() {
         var monthLabel = _determineMonth(_resultRows || []).replace(' Net Adjustments', '');
 
-        // Build sorted rows from _violations dict
+        // Build sorted summary rows from _violations dict
         var rows = [];
         var vdata = _violations || {};
         Object.keys(vdata).forEach(function (user) {
@@ -315,6 +316,7 @@
                     custom_reason:  v.custom_reason  || 0,
                     multi_reason:   v.multi_reason   || 0,
                     total:          total,
+                    drill:          v.rows || [],
                 });
             }
         });
@@ -338,7 +340,8 @@
             'Counts per user of the three Brightpearl adjustment rules: ' +
             'Rule 1 — every adjustment must have a reason code; ' +
             'Rule 2 — only use codes from the standard list (no custom typing); ' +
-            'Rule 3 — only one reason code per adjustment.' +
+            'Rule 3 — only one reason code per adjustment. ' +
+            'Click &#9654; on any row to see the specific adjustments.' +
             '</p>';
 
         if (rows.length === 0) {
@@ -350,6 +353,13 @@
                 '</div>';
         }
 
+        var VIOL_ORDER = { missing_reason: 0, custom_reason: 1, multi_reason: 2 };
+        var VIOL_LABEL = {
+            missing_reason: 'Missing Reason Code',
+            custom_reason:  'Custom Reason Code',
+            multi_reason:   'Multiple Reason Codes',
+        };
+
         // Totals row
         var totMissing = rows.reduce(function (s, r) { return s + r.missing_reason; }, 0);
         var totCustom  = rows.reduce(function (s, r) { return s + r.custom_reason;  }, 0);
@@ -357,13 +367,76 @@
         var totAll     = totMissing + totCustom + totMulti;
 
         var dataRows = rows.map(function (r) {
-            return '<tr>' +
-                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;">' + _esc(r.user) + '</td>' +
+            var isExpanded = !!_violExpanded[r.user];
+
+            // Caret toggle button — <button> handles Enter/Space natively
+            var caret =
+                '<button onclick="window._atcToggleViol(' + _esc(JSON.stringify(r.user)) + ')" ' +
+                'style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 6px 0 0;' +
+                'color:#888;vertical-align:middle;line-height:1;" ' +
+                'title="' + (isExpanded ? 'Collapse' : 'Expand') + ' details for ' + _esc(r.user) + '">' +
+                (isExpanded ? '&#9660;' : '&#9654;') +
+                '</button>';
+
+            var summaryRow =
+                '<tr>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;">' +
+                caret + _esc(r.user) +
+                '</td>' +
                 '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + r.missing_reason.toLocaleString('en-US') + '</td>' +
                 '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + r.custom_reason.toLocaleString('en-US')  + '</td>' +
                 '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + r.multi_reason.toLocaleString('en-US')   + '</td>' +
                 '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">' + r.total.toLocaleString('en-US') + '</td>' +
                 '</tr>';
+
+            if (!isExpanded) return summaryRow;
+
+            // Drilldown — sort by violation type order, then date descending
+            var drillRows = (r.drill || []).slice().sort(function (a, b) {
+                var od = (VIOL_ORDER[a.violation_type] || 0) - (VIOL_ORDER[b.violation_type] || 0);
+                if (od !== 0) return od;
+                return (b.date || '').localeCompare(a.date || '');
+            });
+
+            var drillTbody = drillRows.map(function (dr) {
+                var origCell = dr.original_reason === '(no reason logged)'
+                    ? '<em style="color:#aaa;">(no reason logged)</em>'
+                    : _esc(dr.original_reason || '—');
+                return '<tr>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;white-space:nowrap;">' + _esc(dr.date         || '—') + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(dr.sku          || '—') + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(dr.product_name || '—') + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;text-align:right;">'   + _esc(String(dr.qty   || '—')) + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(dr.warehouse    || '—') + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + origCell + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;color:#555;">'         + _esc(VIOL_LABEL[dr.violation_type] || dr.violation_type) + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            var drillTable =
+                '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="background:#f2f2f2;">' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;white-space:nowrap;">Date</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">SKU</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Product Name</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:right;font-weight:600;letter-spacing:0.06em;">Qty</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Warehouse</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Original Reason</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Violation Type</th>' +
+                '</tr></thead>' +
+                '<tbody>' + drillTbody + '</tbody>' +
+                '</table>';
+
+            var drillRow =
+                '<tr>' +
+                '<td colspan="5" style="padding:0 0 4px 28px;border-bottom:1px solid #e0e0e0;">' +
+                '<div style="border-left:3px solid #e8b4f8;background:#fafafa;overflow-x:auto;">' +
+                drillTable +
+                '</div>' +
+                '</td>' +
+                '</tr>';
+
+            return summaryRow + drillRow;
         }).join('');
 
         var totalRow =
@@ -845,6 +918,7 @@
         _bulkSelections = {};
         _bulkOvCheck    = false;
         _violations     = null;
+        _violExpanded   = {};
         _render();
     };
 
@@ -955,6 +1029,11 @@
         } else {
             _fallbackCopy(text);
         }
+    };
+
+    window._atcToggleViol = function (user) {
+        _violExpanded[user] = !_violExpanded[user];
+        _render();
     };
 
     window._atcCopyViolations = function () {
