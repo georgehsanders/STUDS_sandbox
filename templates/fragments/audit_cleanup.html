@@ -75,6 +75,16 @@
         return Math.abs(n).toLocaleString('en-US');
     }
 
+    // Strips the time component from a datetime string for display only.
+    // "2026-03-01 04:03:29" → "2026-03-01".  Returns the original value
+    // unchanged if it doesn't contain a space, so plain dates are safe.
+    // Never used for the CSV export — raw row.date is written there directly.
+    function _fmtDate(d) {
+        if (!d) return '—';
+        var spaceIdx = String(d).indexOf(' ');
+        return spaceIdx > 0 ? d.substring(0, spaceIdx) : d;
+    }
+
     function _signed(n) {
         n = parseInt(n, 10) || 0;
         return (n >= 0 ? '+' : '−') + Math.abs(n).toLocaleString('en-US');
@@ -399,7 +409,7 @@
                 '<td style="text-align:center;padding:8px 6px;font-size:15px;">' +
                 '<span title="' + _esc(markerTitle) + '">' + marker + '</span>' +
                 '</td>' +
-                '<td style="padding:8px 12px;font-size:12px;white-space:nowrap;">' + _esc(row.date         || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;white-space:nowrap;">' + _esc(_fmtDate(row.date)) + '</td>' +
                 '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.sku          || '—') + '</td>' +
                 '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.product_name || '—') + '</td>' +
                 '<td style="padding:8px 12px;font-size:12px;text-align:right;">'   + _esc(row.quantity     || '—') + '</td>' +
@@ -474,7 +484,7 @@
         var detailGrid =
             '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px 20px;' +
             'background:#f9f9f9;border:1px solid #e0e0e0;padding:16px 20px;margin-bottom:20px;">' +
-            _detailCell('Date',         row.date         || '—') +
+            _detailCell('Date',         _fmtDate(row.date)) +
             _detailCell('SKU',          row.sku          || '—') +
             _detailCell('Product Name', row.product_name || '—') +
             _detailCell('Quantity',     row.quantity     || '—') +
