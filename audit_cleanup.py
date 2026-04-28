@@ -36,6 +36,61 @@ CANONICAL_TYPES = [
 
 _CANONICAL_SET = set(CANONICAL_TYPES)
 
+# ── Keyword map for custom-reason suggestions ──────────────────────────────────
+# Used to suggest a canonical Type of Movement when a studio enters a free-text
+# reason instead of selecting from the canonical list.
+#
+# Each entry: (must_all_match, [substrings], canonical_suggestion)
+#   must_all_match=True  → ALL substrings must appear (AND logic)
+#   must_all_match=False → ANY substring is sufficient (OR logic)
+#
+# Ordered most-specific first — first match wins.  Edit freely as new custom
+# phrasings appear in production data.
+KEYWORD_MAP = [
+    (True,  ["lost", "found"],
+             "Lost & Found"),
+    (False, ["piercing room", "piercing saline"],
+             "Piercing Room Saline"),
+    (False, ["missing stone", "loose stone"],
+             "Damaged - Missing/Loose Stone"),
+    (False, ["incompatible pin", "defective pin", "bent pin"],
+             "Damaged - Defective/Incompatible Pin"),
+    (False, ["quality issue", "wrong color", "wrong size", "wrong shape", "discolor"],
+             "Damaged - Quality Issue (Color/Size/Shape)"),
+    (False, ["vm tool", "visual merch", "display damage"],
+             "Damaged - VM Tool/Display"),
+    (False, ["system error"],
+             "System Error - Return"),
+    (False, ["to error", "transfer error"],
+             "TO Error"),
+    (False, ["dekit", "de-kit", "de kit"],
+             "De-Kit"),
+    (False, ["reallocate"],
+             "Reallocated Inv – Damaged"),
+    (False, ["contam"],
+             "Damaged - Contamination"),
+    (False, ["bent", "broken", "snap", "crack"],
+             "Damaged - Bent/Broken"),
+    (False, ["burn"],
+             "Damaged - Burnt"),
+    (False, ["theft", "stolen", "stole"],
+             "Theft"),
+    (False, ["oversold", "overselling"],
+             "Overselling"),
+    (False, ["lost", "misplaced"],
+             "Lost & Found"),
+    (False, ["found"],
+             "Lost & Found"),
+    (False, ["recount", "stock check", "reconcile"],
+             "Stock Check"),
+    (False, ["saline"],
+             "Damaged - Saline"),
+    (False, ["purchase", "bought"],
+             "Purchase"),
+    (False, ["kit"],
+             "Kit"),
+]
+
 # Warehouse names to exclude (case-insensitive exact match after strip).
 _EXCLUDED_WAREHOUSES = {"whiplash ecom", "whiplash retail"}
 
@@ -133,6 +188,16 @@ def _classify_reason(reason):
                 "option_b": best_b,
                 "original": reason,
             }
+
+    # Case 4.5: keyword pattern match → suggestion
+    lower = reason.lower()
+    for must_all_match, patterns, suggestion in KEYWORD_MAP:
+        if must_all_match:
+            if all(p in lower for p in patterns):
+                return None, "suggestion", {"suggested": suggestion, "original": reason}
+        else:
+            if any(p in lower for p in patterns):
+                return None, "suggestion", {"suggested": suggestion, "original": reason}
 
     # No match at all → flag for dropdown review
     return None, "unknown", {"original": reason}

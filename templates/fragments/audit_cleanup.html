@@ -130,15 +130,16 @@
             'Upload your raw Brightpearl audit trail export and this tool will generate a cleaned version ' +
             'for reporting on studio-level inventory adjustments. The cleaned file excludes:' +
             '</p>' +
-            '<ul style="font-size:13px;color:#444;line-height:1.75;margin:0 0 10px 18px;padding:0;">' +
+            '<ul style=”font-size:13px;color:#444;line-height:1.75;margin:0 0 10px 18px;padding:0;”>' +
             '<li>Shopify sales</li>' +
             '<li>Warehouse activity from Whiplash Ecom and Whiplash Retail</li>' +
             '<li>Warehouse-to-studio inventory transfers (both sides)</li>' +
             '</ul>' +
-            '<p style="font-size:13px;color:#444;line-height:1.65;margin:0;">' +
-            'It also automatically fixes duplicate movement-type entries (for example “TheftTheft” becomes “Theft”) ' +
-            'and flags any rows where two different movement types were entered together so you can confirm ' +
-            'which one is correct before exporting.' +
+            '<p style=”font-size:13px;color:#444;line-height:1.65;margin:0;”>' +
+            'It also automatically fixes duplicate movement-type entries (for example “TheftTheft” becomes “Theft”), ' +
+            'suggests the correct movement type when a studio enters a free-text reason that matches a known keyword, ' +
+            'and flags any rows where two different movement types were entered together — ' +
+            'so you can confirm the right value before exporting.' +
             '</p>' +
             '</div>';
     }
@@ -295,6 +296,31 @@
                 '<div style="display:flex;gap:12px;margin-bottom:20px;">' +
                 _typeBtn(optA) + _typeBtn(optB) +
                 '</div>';
+        } else if (row.flag_type === 'suggestion') {
+            // Suggestion variant — keyword matched a canonical type; pre-selected
+            var origReason  = (row.flag_detail && row.flag_detail.original)  ? row.flag_detail.original  : '';
+            var suggestedType = (row.flag_detail && row.flag_detail.suggested) ? row.flag_detail.suggested : '';
+            var helperText =
+                '<em style="font-size:12px;color:#888;display:block;margin-bottom:6px;">' +
+                'Custom reason entered: <strong>' + _esc(origReason) + '</strong>' +
+                '</em>' +
+                '<div style="display:inline-flex;align-items:center;gap:6px;' +
+                'background:#fff8dc;border:1px solid #e0c040;border-radius:4px;' +
+                'padding:5px 10px;margin-bottom:10px;font-size:12px;color:#5a4800;">' +
+                '&#128161; Suggested: <strong>' + _esc(suggestedType) + '</strong>' +
+                '</div>';
+            var sugOptions = CANONICAL_TYPES.map(function (t) {
+                return '<option value="' + _esc(t) + '"' + (t === suggestedType ? ' selected' : '') + '>' + _esc(t) + '</option>';
+            }).join('');
+            selectionHtml = helperText +
+                '<div style="margin-bottom:20px;">' +
+                '<select id="atc-modal-dropdown" class="hq-input" ' +
+                'style="width:100%;max-width:400px;" ' +
+                'onchange="window._atcDropdownChange(this)">' +
+                '<option value="">-- Select movement type --</option>' +
+                sugOptions +
+                '</select>' +
+                '</div>';
         } else {
             // Dropdown variant (no_reason or unknown)
             var helperText = '';
@@ -385,6 +411,21 @@
             '</button>';
     }
 
+    // ── Pre-select helper for suggestion rows ─────────────────────────────────
+    // Sets _selType to the suggested canonical type when the current flagged
+    // row has flag_type === 'suggestion', so the user only needs to tick Override.
+    // Resets _selType to null for all other flag types.
+    function _preselectRow() {
+        if (!_result || !_result.flagged) return;
+        var row = _result.flagged[_flagIdx];
+        if (!row) return;
+        if (row.flag_type === 'suggestion' && row.flag_detail && row.flag_detail.suggested) {
+            _selType = row.flag_detail.suggested;
+        } else {
+            _selType = null;
+        }
+    }
+
     // ── Event handlers (exported to window for inline onclick) ────────────────
 
     window._atcFileSelect = function (input) {
@@ -417,6 +458,7 @@
                 _resultRows = data.rows || [];
 
                 _state = (data.flagged && data.flagged.length > 0) ? 'reviewing' : 'complete';
+                if (_state === 'reviewing') _preselectRow();
                 _render();
             })
             .catch(function (e) {
@@ -468,12 +510,15 @@
         _confirmed[String(row.row_index)] = _selType;
 
         _flagIdx++;
-        _selType = null;
         _ovCheck = false;
 
         if (_flagIdx >= flaggedRows.length) {
             // All flagged rows resolved
             _state = 'complete';
+            _selType = null;
+        } else {
+            // Pre-select suggestion for the next row if applicable
+            _preselectRow();
         }
         _render();
     };
