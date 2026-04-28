@@ -348,6 +348,8 @@
             '<th style="padding:8px 12px;">Product Name</th>' +
             '<th style="padding:8px 12px;text-align:right;">Qty</th>' +
             '<th style="padding:8px 12px;">Warehouse</th>' +
+            '<th style="padding:8px 12px;">User</th>' +
+            '<th style="padding:8px 12px;min-width:180px;">Original Reason</th>' +
             '<th style="padding:8px 12px;min-width:240px;">Type of Movement</th>' +
             '</tr></thead>';
 
@@ -364,6 +366,18 @@
                 row.flag_type === 'combo'      ? 'Two movement types detected' :
                 row.flag_type === 'suggestion' ? 'Keyword match — suggestion pre-filled' :
                                                  'No movement type — please select';
+
+            // Original reason cell — content varies by flag type
+            var fd = row.flag_detail || {};
+            var origReasonHtml;
+            if (row.flag_type === 'no_reason') {
+                origReasonHtml = '<em style="color:#aaa;">(no reason logged)</em>';
+            } else {
+                var origText = fd.original || '';
+                origReasonHtml = origText
+                    ? _esc(origText)
+                    : '<em style="color:#aaa;">—</em>';
+            }
 
             var opts = CANONICAL_TYPES.map(function (t) {
                 return '<option value="' + _esc(t) + '"' + (t === sel ? ' selected' : '') + '>' +
@@ -384,11 +398,13 @@
                 '<td style="text-align:center;padding:8px 6px;font-size:15px;">' +
                 '<span title="' + _esc(markerTitle) + '">' + marker + '</span>' +
                 '</td>' +
-                '<td style="padding:8px 12px;font-size:12px;white-space:nowrap;">' + _esc(row.date      || '—') + '</td>' +
-                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.sku       || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;white-space:nowrap;">' + _esc(row.date         || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.sku          || '—') + '</td>' +
                 '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.product_name || '—') + '</td>' +
-                '<td style="padding:8px 12px;font-size:12px;text-align:right;">'   + _esc(row.quantity  || '—') + '</td>' +
-                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.warehouse || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;text-align:right;">'   + _esc(row.quantity     || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.warehouse    || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;white-space:nowrap;">' + _esc(row.username     || 'Unknown') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;">'                    + origReasonHtml + '</td>' +
                 '<td style="padding:8px 12px;">' + dropdown + '</td>' +
                 '</tr>';
         }).join('');
