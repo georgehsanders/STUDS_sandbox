@@ -13,6 +13,7 @@
     'use strict';
 
     // ── Canonical types (mirror of audit_cleanup.py CANONICAL_TYPES) ─────────
+    // Keep in sync with the Python constant of the same name.
     var CANONICAL_TYPES = [
         "Stock Check",
         "Damaged - Contamination",
@@ -35,13 +36,28 @@
         "Kit"
     ];
 
+    // ── Quality-related codes (mirror of audit_cleanup.py QUALITY_RELATED_CODES)
+    // Used by _comboDefault() to prefer the quality code over Contamination
+    // when computing bulk-review pre-fills for case 4 combo rows.
+    var QUALITY_RELATED_CODES = [
+        "Damaged - Defective/Incompatible Pin",
+        "Damaged - Bent/Broken",
+        "Damaged - Quality Issue (Color/Size/Shape)",
+        "Damaged - Missing/Loose Stone",
+        "Damaged - Burnt"
+    ];
+
     // ── State ─────────────────────────────────────────────────────────────────
     var _state    = 'idle';   // 'idle' | 'processing' | 'reviewing' | 'complete'
     var _result   = null;     // JSON from /process
-    var _confirmed = {};      // {row_index (str): movement_type}
-    var _flagIdx  = 0;        // index into _result.flagged
-    var _selType  = null;     // currently selected type in modal
-    var _ovCheck  = false;    // HQ Override checkbox state
+    var _confirmed  = {};     // {row_index (str): movement_type}  — one-at-a-time mode
+    var _flagIdx    = 0;      // index into _result.flagged        — one-at-a-time mode
+    var _selType    = null;   // currently selected type in modal  — one-at-a-time mode
+    var _ovCheck    = false;  // HQ Override checkbox state        — one-at-a-time mode
+    // Bulk-review mode state
+    var _reviewMode     = null; // null (selector) | 'modal' | 'bulk'
+    var _bulkSelections = {};   // {row_index (str): movement_type}
+    var _bulkOvCheck    = false;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     function _esc(s) {
@@ -118,7 +134,8 @@
         if (!el) return;
 
         var html = _buildInfoCard() + _buildBody();
-        if (_state === 'reviewing') html += _buildModal();
+        // One-at-a-time modal is injected as an overlay; bulk table is inline in _buildBody()
+        if (_state === 'reviewing' && _reviewMode === 'modal') html += _buildModal();
         el.innerHTML = html;
     }
 
@@ -149,7 +166,12 @@
         if (_state === 'idle')       return _buildUploadZone();
         if (_state === 'processing') return _buildProcessing();
         // reviewing or complete
-        return _buildSummary() + (_state === 'complete' ? _buildOverview() + _buildDownload() : '');
+        var base = _buildSummary();
+        if (_state === 'complete') return base + _buildOverview() + _buildDownload();
+        // reviewing — route by mode
+        if (_reviewMode === null)   return base + _buildReviewModeSelector();
+        if (_reviewMode === 'bulk') return base + _buildBulkTable();
+        return base; // 'modal' — overlay appended by _render()
     }
 
     function _buildUploadZone() {
@@ -257,6 +279,163 @@
             '<span style="font-size:12px;color:#999;margin-left:16px;">' +
             _esc(_outputFilename(_result ? _result.original_filename : '')) +
             '</span>' +
+            '</div>';
+    }
+
+    // ── Review-mode selector ──────────────────────────────────────────────────
+    function _buildReviewModeSelector() {
+        var count = _result ? (_result.flagged || []).length : 0;
+        var noun  = count === 1 ? 'row' : 'rows';
+        return '<div class="hq-section" style="margin-bottom:24px;">' +
+            '<h2 class="hq-section-heading" style="margin-bottom:10px;">' +
+            'Resolve ' + count + ' Flagged ' + noun[0].toUpperCase() + noun.slice(1) +
+            '</h2>' +
+            '<p class="hq-help-text" style="margin-bottom:18px;">' +
+            'Choose how you\'d like to work through the flagged rows before exporting.' +
+            '</p>' +
+            '<div style="display:flex;gap:12px;">' +
+            '<button class="hq-btn hq-btn-lavender" ' +
+            'onclick="window._atcSetReviewMode(\'modal\')" ' +
+            'style="height:40px;padding:0 24px;font-size:13px;">' +
+            'One at a Time' +
+            '</button>' +
+            '<button class="hq-btn hq-btn-white" ' +
+            'onclick="window._atcSetReviewMode(\'bulk\')" ' +
+            'style="height:40px;padding:0 24px;font-size:13px;">' +
+            'Review All at Once' +
+            '</button>' +
+            '</div>' +
+            '</div>';
+    }
+
+    // ── Bulk review table ─────────────────────────────────────────────────────
+    function _comboDefault(flag_detail) {
+        var a = (flag_detail && flag_detail.option_a) ? flag_detail.option_a : '';
+        var b = (flag_detail && flag_detail.option_b) ? flag_detail.option_b : '';
+        var contam = 'Damaged - Contamination';
+        if (a === contam && QUALITY_RELATED_CODES.indexOf(b) !== -1) return b;
+        if (b === contam && QUALITY_RELATED_CODES.indexOf(a) !== -1) return a;
+        return a; // first-found (existing default)
+    }
+
+    function _initBulkSelections() {
+        var sels = {};
+        (_result ? (_result.flagged || []) : []).forEach(function (row) {
+            var def = '';
+            if (row.flag_type === 'combo') {
+                def = _comboDefault(row.flag_detail);
+            } else if (row.flag_type === 'suggestion') {
+                def = (row.flag_detail && row.flag_detail.suggested) ? row.flag_detail.suggested : '';
+            }
+            // no_reason / unknown: leave blank — user must pick
+            sels[String(row.row_index)] = def;
+        });
+        return sels;
+    }
+
+    function _buildBulkTable() {
+        var flaggedRows = _result ? (_result.flagged || []) : [];
+        var unresolved = flaggedRows.filter(function (row) {
+            return !_bulkSelections[String(row.row_index)];
+        }).length;
+
+        var thead =
+            '<thead><tr>' +
+            '<th style="width:32px;text-align:center;padding:8px 6px;"></th>' +
+            '<th style="padding:8px 12px;white-space:nowrap;">Date</th>' +
+            '<th style="padding:8px 12px;">SKU</th>' +
+            '<th style="padding:8px 12px;">Product Name</th>' +
+            '<th style="padding:8px 12px;text-align:right;">Qty</th>' +
+            '<th style="padding:8px 12px;">Warehouse</th>' +
+            '<th style="padding:8px 12px;min-width:240px;">Type of Movement</th>' +
+            '</tr></thead>';
+
+        var tbodyRows = flaggedRows.map(function (row) {
+            var ri  = String(row.row_index);
+            var sel = _bulkSelections[ri] || '';
+
+            // Icon marker — 🔀 combo, 💡 suggestion, ⚠️ no_reason/unknown
+            var marker =
+                row.flag_type === 'combo'      ? '&#x1F500;' :
+                row.flag_type === 'suggestion' ? '&#x1F4A1;' :
+                                                 '&#x26A0;&#xFE0F;';
+            var markerTitle =
+                row.flag_type === 'combo'      ? 'Two movement types detected' :
+                row.flag_type === 'suggestion' ? 'Keyword match — suggestion pre-filled' :
+                                                 'No movement type — please select';
+
+            var opts = CANONICAL_TYPES.map(function (t) {
+                return '<option value="' + _esc(t) + '"' + (t === sel ? ' selected' : '') + '>' +
+                    _esc(t) + '</option>';
+            }).join('');
+
+            var dropdown =
+                '<select class="hq-input atc-bulk-sel" ' +
+                'data-ridx="' + _esc(ri) + '" ' +
+                'style="width:100%;" ' +
+                'onchange="window._atcBulkChange(this)">' +
+                '<option value="">— select —</option>' +
+                opts +
+                '</select>';
+
+            var rowBg = sel ? '' : 'background:#fff8f0;';
+            return '<tr style="' + rowBg + '">' +
+                '<td style="text-align:center;padding:8px 6px;font-size:15px;">' +
+                '<span title="' + _esc(markerTitle) + '">' + marker + '</span>' +
+                '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;white-space:nowrap;">' + _esc(row.date      || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.sku       || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.product_name || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;text-align:right;">'   + _esc(row.quantity  || '—') + '</td>' +
+                '<td style="padding:8px 12px;font-size:12px;">'                    + _esc(row.warehouse || '—') + '</td>' +
+                '<td style="padding:8px 12px;">' + dropdown + '</td>' +
+                '</tr>';
+        }).join('');
+
+        var unresolvedNote = unresolved > 0
+            ? '<p class="atc-unresolved-note" style="font-size:12px;color:#c05000;margin:0 0 12px 0;">' +
+              '&#x26A0;&#xFE0F; ' + unresolved + ' row' + (unresolved !== 1 ? 's' : '') +
+              ' still need a movement type and will be excluded from the export if left blank.' +
+              '</p>'
+            : '<p class="atc-unresolved-note" style="display:none;font-size:12px;color:#c05000;margin:0 0 12px 0;"></p>';
+
+        var overrideLabel =
+            '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:16px;">' +
+            '<input type="checkbox" id="atc-bulk-override" ' +
+            'onchange="window._atcBulkOverride(this)" ' +
+            'style="width:15px;height:15px;cursor:pointer;">' +
+            'HQ Override? Check yes to confirm all selections above' +
+            '</label>';
+
+        var confirmDisabled = !_bulkOvCheck;
+        var confirmBtn =
+            '<button class="hq-btn hq-btn-lavender" id="atc-bulk-confirm-btn" ' +
+            'onclick="window._atcBulkConfirm()" ' +
+            (confirmDisabled ? 'disabled ' : '') +
+            'style="height:36px;padding:0 28px;font-size:13px;' +
+            (confirmDisabled ? 'opacity:0.4;cursor:not-allowed;' : '') + '">' +
+            'Confirm All' +
+            '</button>' +
+            '<button class="hq-btn" onclick="window._atcSetReviewMode(null)" ' +
+            'style="margin-left:10px;">' +
+            'Back' +
+            '</button>';
+
+        return '<div class="hq-section" style="margin-bottom:24px;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+            '<h2 class="hq-section-heading" style="margin-bottom:0;">All Flagged Rows</h2>' +
+            '<span style="font-size:12px;color:#999;">' +
+            '&#x1F500; combo &nbsp;&nbsp; &#x1F4A1; suggestion &nbsp;&nbsp; &#x26A0; needs selection' +
+            '</span>' +
+            '</div>' +
+            unresolvedNote +
+            '<div style="overflow-x:auto;margin-bottom:20px;">' +
+            '<table class="hq-table" style="width:100%;">' +
+            thead + '<tbody>' + tbodyRows + '</tbody>' +
+            '</table>' +
+            '</div>' +
+            overrideLabel +
+            confirmBtn +
             '</div>';
     }
 
@@ -457,8 +636,12 @@
                 // overview client-side.  Cache them here.
                 _resultRows = data.rows || [];
 
-                _state = (data.flagged && data.flagged.length > 0) ? 'reviewing' : 'complete';
-                if (_state === 'reviewing') _preselectRow();
+                if (data.flagged && data.flagged.length > 0) {
+                    _state = 'reviewing';
+                    _reviewMode = null; // show mode selector before entering either flow
+                } else {
+                    _state = 'complete';
+                }
                 _render();
             })
             .catch(function (e) {
@@ -524,13 +707,71 @@
     };
 
     window._atcCancel = function () {
-        _state      = 'idle';
-        _result     = null;
-        _resultRows = null;
-        _confirmed  = {};
-        _flagIdx    = 0;
-        _selType    = null;
-        _ovCheck    = false;
+        _state          = 'idle';
+        _result         = null;
+        _resultRows     = null;
+        _confirmed      = {};
+        _flagIdx        = 0;
+        _selType        = null;
+        _ovCheck        = false;
+        _reviewMode     = null;
+        _bulkSelections = {};
+        _bulkOvCheck    = false;
+        _render();
+    };
+
+    window._atcSetReviewMode = function (mode) {
+        _reviewMode = mode;
+        if (mode === 'bulk') {
+            _bulkSelections = _initBulkSelections();
+            _bulkOvCheck    = false;
+        } else if (mode === 'modal') {
+            // Reset one-at-a-time state; pre-select if first row is a suggestion
+            _flagIdx = 0;
+            _ovCheck = false;
+            _preselectRow();
+        }
+        _render();
+    };
+
+    window._atcBulkChange = function (sel) {
+        var ri = sel.dataset.ridx;
+        _bulkSelections[ri] = sel.value || '';
+        // Refresh the unresolved warning without full re-render
+        var flaggedRows = _result ? (_result.flagged || []) : [];
+        var unresolved = flaggedRows.filter(function (row) {
+            return !_bulkSelections[String(row.row_index)];
+        }).length;
+        var note = document.querySelector('#atc-content .atc-unresolved-note');
+        if (note) {
+            note.textContent = unresolved > 0
+                ? '⚠️ ' + unresolved + ' row' + (unresolved !== 1 ? 's' : '') +
+                  ' still need a movement type and will be excluded from the export if left blank.'
+                : '';
+            note.style.display = unresolved > 0 ? 'block' : 'none';
+        }
+        // Highlight / un-highlight the row
+        var row = sel.closest('tr');
+        if (row) row.style.background = sel.value ? '' : '#fff8f0';
+    };
+
+    window._atcBulkOverride = function (cb) {
+        _bulkOvCheck = cb.checked;
+        var btn = document.getElementById('atc-bulk-confirm-btn');
+        if (btn) {
+            btn.disabled      = !_bulkOvCheck;
+            btn.style.opacity = _bulkOvCheck ? '1' : '0.4';
+            btn.style.cursor  = _bulkOvCheck ? 'pointer' : 'not-allowed';
+        }
+    };
+
+    window._atcBulkConfirm = function () {
+        if (!_bulkOvCheck) return;
+        // Merge bulk selections into _confirmed (only non-empty values)
+        Object.keys(_bulkSelections).forEach(function (ri) {
+            if (_bulkSelections[ri]) _confirmed[ri] = _bulkSelections[ri];
+        });
+        _state = 'complete';
         _render();
     };
 

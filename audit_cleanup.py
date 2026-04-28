@@ -36,6 +36,20 @@ CANONICAL_TYPES = [
 
 _CANONICAL_SET = set(CANONICAL_TYPES)
 
+# ── Quality-related damage codes ───────────────────────────────────────────────
+# Quality-related damage codes that describe what's wrong with the product
+# itself, as opposed to environmental causes like contamination.  Used to break
+# ties in combo defaults — when a combo pairs Contamination with a
+# quality-related code, the quality-related code wins because it's more
+# actionable for reporting.
+QUALITY_RELATED_CODES = [
+    "Damaged - Defective/Incompatible Pin",
+    "Damaged - Bent/Broken",
+    "Damaged - Quality Issue (Color/Size/Shape)",
+    "Damaged - Missing/Loose Stone",
+    "Damaged - Burnt",
+]
+
 # ── Keyword map for custom-reason suggestions ──────────────────────────────────
 # Used to suggest a canonical Type of Movement when a studio enters a free-text
 # reason instead of selecting from the canonical list.
