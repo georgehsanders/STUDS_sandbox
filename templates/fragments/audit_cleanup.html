@@ -62,7 +62,8 @@
     var _bulkOvCheck    = false;
     // Violations report
     var _violations     = null; // {username: {missing_reason, custom_reason, multi_reason, rows[]}}
-    var _violExpanded   = {};   // {username: bool} — which drilldowns are open
+    var _violExpanded   = {};   // {username: bool} — which violation drilldowns are open
+    var _adjExpanded    = {};   // {type: bool}     — which Net Adjustments drilldowns are open
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     function _esc(s) {
@@ -247,20 +248,89 @@
 
     function _buildOverview() {
         var ov = _computeOverview();
-        var rows = ov.items;
+        var items = ov.items;
 
-        var tableRows = rows.map(function (item) {
-            return '<tr>' +
-                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;">' + _esc(item.type) + '</td>' +
-                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + _signed(item.net) + '</td>' +
+        // Returns rows of a given type from _resultRows, sorted by |qty| desc,
+        // capped at 20.  Accounts for _confirmed overrides on flagged rows.
+        var getTopRows = function (type) {
+            var matched = (_resultRows || []).filter(function (row) {
+                var t = row.flagged
+                    ? (_confirmed[String(row.row_index)] || null)
+                    : row.type_of_movement;
+                return t === type;
+            });
+            matched.sort(function (a, b) {
+                return Math.abs(parseInt(b.quantity, 10) || 0) -
+                       Math.abs(parseInt(a.quantity, 10) || 0);
+            });
+            return matched.slice(0, 20);
+        };
+
+        var tableRows = items.map(function (item) {
+            var isExpanded = !!_adjExpanded[item.type];
+
+            var caret =
+                '<button onclick="window._atcToggleAdj(' + _esc(JSON.stringify(item.type)) + ')" ' +
+                'style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 6px 0 0;' +
+                'color:#888;vertical-align:middle;line-height:1;" ' +
+                'title="' + (isExpanded ? 'Collapse' : 'Expand') + ' top adjustments for ' + _esc(item.type) + '">' +
+                (isExpanded ? '&#9660;' : '&#9654;') +
+                '</button>';
+
+            var summaryRow =
+                '<tr>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;">' +
+                caret + _esc(item.type) +
+                '</td>' +
+                '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + _signed(item.net)   + '</td>' +
                 '<td style="padding:10px 14px;border-bottom:1px solid #e0e0e0;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;">' + _thousands(item.count) + '</td>' +
                 '</tr>';
+
+            if (!isExpanded) return summaryRow;
+
+            var topRows = getTopRows(item.type);
+            var drillTbody = topRows.length === 0
+                ? '<tr><td colspan="6" style="padding:10px 12px;font-size:12px;color:#aaa;">No adjustments found.</td></tr>'
+                : topRows.map(function (row) {
+                    return '<tr>' +
+                        '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;white-space:nowrap;">' + _esc(_fmtDate(row.date))     + '</td>' +
+                        '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(row.sku          || '—') + '</td>' +
+                        '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(row.product_name || '—') + '</td>' +
+                        '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;text-align:right;font-variant-numeric:tabular-nums;">' + _signed(row.quantity) + '</td>' +
+                        '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(row.warehouse    || '—') + '</td>' +
+                        '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(row.username     || 'Unknown') + '</td>' +
+                        '</tr>';
+                }).join('');
+
+            var drillTable =
+                '<table style="width:100%;border-collapse:collapse;">' +
+                '<thead><tr style="background:#f2f2f2;">' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;white-space:nowrap;">Date</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">SKU</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Product Name</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:right;font-weight:600;letter-spacing:0.06em;">Qty</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Warehouse</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">User</th>' +
+                '</tr></thead>' +
+                '<tbody>' + drillTbody + '</tbody>' +
+                '</table>';
+
+            var drillRow =
+                '<tr>' +
+                '<td colspan="3" style="padding:0 0 4px 28px;border-bottom:1px solid #e0e0e0;">' +
+                '<div style="border-left:3px solid #b4d8f8;background:#fafafa;overflow-x:auto;">' +
+                drillTable +
+                '</div>' +
+                '</td>' +
+                '</tr>';
+
+            return summaryRow + drillRow;
         }).join('');
 
         var totalRow =
             '<tr style="font-weight:600;">' +
             '<td style="padding:10px 14px;font-size:13px;border-top:1.5px solid #000;">Total</td>' +
-            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + _signed(ov.totalNet) + '</td>' +
+            '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + _signed(ov.totalNet)      + '</td>' +
             '<td style="padding:10px 14px;font-size:13px;text-align:right;border-top:1.5px solid #000;font-variant-numeric:tabular-nums;">' + _thousands(ov.totalCount) + '</td>' +
             '</tr>';
 
@@ -919,6 +989,7 @@
         _bulkOvCheck    = false;
         _violations     = null;
         _violExpanded   = {};
+        _adjExpanded    = {};
         _render();
     };
 
@@ -1029,6 +1100,11 @@
         } else {
             _fallbackCopy(text);
         }
+    };
+
+    window._atcToggleAdj = function (type) {
+        _adjExpanded[type] = !_adjExpanded[type];
+        _render();
     };
 
     window._atcToggleViol = function (user) {

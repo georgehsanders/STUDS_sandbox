@@ -2499,6 +2499,11 @@ def hq_audit_cleanup_process():
             'type_of_movement': r['type_of_movement'],
             'quantity':         r['quantity'],
             'date':             r['date'],
+            # Additional fields for the Net Adjustments drilldown
+            'sku':              r['sku'],
+            'product_name':     r['product_name'],
+            'warehouse':        r['warehouse'],
+            'username':         r['username'],
         }
         for r in result['rows']
     ]
