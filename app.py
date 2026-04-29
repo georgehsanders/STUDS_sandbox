@@ -2671,90 +2671,43 @@ def hq_database_upload_sku_status():
 @app.route('/hq/database/upload-top-sellers', methods=['POST'])
 @hq_login_required
 def hq_database_upload_top_sellers():
+    import tempfile as _tempfile
     top_sellers_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
     f = request.files.get('top_sellers_file')
     if not f or not f.filename:
         return redirect('/hq/?section=database')
+    raw_bytes = f.read()
+    # Write to a temp file so load_top_sellers() can peek at the BOM
+    # (encoding detection requires a seekable binary file, not a stream).
+    _fd, _tmp_path = _tempfile.mkstemp(suffix='.csv')
     try:
-        raw = f.read().decode('utf-8-sig', errors='replace')
-    except Exception as e:
-        flash(f'Could not read uploaded file: {e}', 'error')
-        return redirect('/hq/?section=database')
-    reader = csv.DictReader(io.StringIO(raw))
-    expected_headers = ['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales']
-    actual_headers = [h.strip().lower() for h in (reader.fieldnames or [])]
-    if actual_headers != expected_headers:
-        flash(
-            f'Invalid header. Expected: {", ".join(expected_headers)}. Got: {", ".join(actual_headers) or "(none)"}.',
-            'error'
-        )
-        return redirect('/hq/?section=database')
-    row_errors = []
-    valid_rows = []
-    for i, row in enumerate(reader, start=2):
-        # Skip fully empty rows
-        if not any(v.strip() for v in row.values()):
-            continue
-        rank_str = row.get('rank', '').strip()
-        sku_str = row.get('sku', '').strip().upper()
-        units_str = row.get('total_net_units', '').strip()
-        sales_str = row.get('total_net_sales_usd', '').strip()
-        studios_str = row.get('studios_with_sales', '').strip()
-        # Validate rank
+        os.close(_fd)
+        with open(_tmp_path, 'wb') as _tf:
+            _tf.write(raw_bytes)
         try:
-            rank = int(rank_str)
-            if rank < 1:
-                row_errors.append(f'Row {i}: rank must be >= 1 (got {rank_str!r}).')
-                continue
-        except ValueError:
-            row_errors.append(f'Row {i}: rank is not a valid integer (got {rank_str!r}).')
-            continue
-        # Validate sku
-        if not sku_str:
-            row_errors.append(f'Row {i}: sku is empty.')
-            continue
-        if len(sku_str.split()) != 1:
-            row_errors.append(f'Row {i}: sku contains whitespace (got {sku_str!r}).')
-            continue
-        # Validate total_net_units
+            valid_rows, stats = load_top_sellers(_tmp_path, _return_stats=True)
+        except ValueError as ve:
+            flash(f'Failed to load uploaded Top Sellers file: {ve}', 'error')
+            return redirect('/hq/?section=database')
+        if not valid_rows:
+            flash('Top Sellers file appears empty or contained no valid rows.', 'error')
+            return redirect('/hq/?section=database')
+        archive_file_if_exists(top_sellers_path, 'top_sellers')
+        os.makedirs(MASTER_DIR, exist_ok=True)
+        with open(top_sellers_path, 'wb') as out:
+            out.write(raw_bytes)
+        scrubbed = stats.get('scrubbed_count', 0)
+        msg = f'Top Sellers data uploaded — {len(valid_rows)} SKUs ranked'
+        if scrubbed:
+            msg += f', {scrubbed} non-inventory SKUs scrubbed.'
+        else:
+            msg += '.'
+        flash(msg, 'success')
+    finally:
         try:
-            units = int(units_str)
-            if units < 0:
-                row_errors.append(f'Row {i}: total_net_units must be >= 0 (got {units_str!r}).')
-                continue
-        except ValueError:
-            row_errors.append(f'Row {i}: total_net_units is not a valid integer (got {units_str!r}).')
-            continue
-        # Validate total_net_sales_usd
-        try:
-            sales = int(sales_str)
-            if sales < 0:
-                row_errors.append(f'Row {i}: total_net_sales_usd must be >= 0 (got {sales_str!r}).')
-                continue
-        except ValueError:
-            row_errors.append(f'Row {i}: total_net_sales_usd is not a valid integer (got {sales_str!r}).')
-            continue
-        # Validate studios_with_sales
-        try:
-            studios = int(studios_str)
-            if studios < 0:
-                row_errors.append(f'Row {i}: studios_with_sales must be >= 0 (got {studios_str!r}).')
-                continue
-        except ValueError:
-            row_errors.append(f'Row {i}: studios_with_sales is not a valid integer (got {studios_str!r}).')
-            continue
-        valid_rows.append({'rank': rank, 'sku': sku_str, 'total_net_units': units, 'total_net_sales_usd': sales, 'studios_with_sales': studios})
-    if row_errors:
-        for msg in row_errors:
-            flash(msg, 'error')
-        return redirect('/hq/?section=database')
-    archive_file_if_exists(top_sellers_path, 'top_sellers')
-    os.makedirs(MASTER_DIR, exist_ok=True)
-    with open(top_sellers_path, 'w', newline='', encoding='utf-8') as out:
-        writer = csv.DictWriter(out, fieldnames=['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales'])
-        writer.writeheader()
-        writer.writerows(valid_rows)
-    flash(f'Top Sellers file updated. {len(valid_rows)} SKUs loaded.', 'success')
+            os.unlink(_tmp_path)
+        except OSError:
+            pass
     return redirect('/hq/?section=database')
 
 
