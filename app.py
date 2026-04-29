@@ -460,37 +460,125 @@ def load_sku_status():
     return result
 
 
-def load_top_sellers():
+TOP_SELLERS_FRESHNESS_WARNING_DAYS = 21
+
+
+def load_top_sellers(_path=None, _return_stats=False):
     """
-    Reads /database/master/Top_Sellers.csv and returns a list of dicts:
-    [{"rank": int, "sku": str, "total_net_units": int, "total_net_sales_usd": int, "studios_with_sales": int}, ...]
-    Returns [] if file doesn't exist. SKUs uppercased.
-    Rows failing validation are skipped silently with stderr log.
+    Reads Top_Sellers.csv and returns a list of dicts:
+      [{"rank": int, "sku": str, "total_net_units": int,
+        "total_net_sales_usd": int|None, "studios_with_sales": int|None}, ...]
+
+    Accepts two export formats:
+      Format A — 5-column UTF-8 CSV produced by the internal export tool:
+        rank, sku, total_net_units, total_net_sales_usd, studios_with_sales
+      Format B — 2-column Tableau export (UTF-16 LE or UTF-8, tab-separated):
+        sku, <any column containing "units">
+        Duplicate SKUs are summed, then filtered to master-SKU list,
+        then sorted by units desc and re-ranked 1, 2, 3, …
+        total_net_sales_usd and studios_with_sales are set to None.
+
+    Raises ValueError for unrecognized formats.
+    Returns (results, stats) if _return_stats=True, else results.
+    stats = {"scrubbed_count": int, "scrubbed_examples": [str, ...]}
     """
-    path = os.path.join(DATABASE_DIR, 'master', 'Top_Sellers.csv')
+    path = _path or os.path.join(DATABASE_DIR, 'master', 'Top_Sellers.csv')
     if not os.path.isfile(path):
         print(f'[load_top_sellers] file not found at {path} — returning empty list', file=sys.stderr)
-        return []
-    results = []
+        return ([], {"scrubbed_count": 0, "scrubbed_examples": []}) if _return_stats else []
+
+    # ── Detect encoding ───────────────────────────────────────────────────────
+    with open(path, 'rb') as _fb:
+        bom = _fb.read(2)
+    if bom in (b'\xff\xfe', b'\xfe\xff'):
+        encoding = 'utf-16'
+    else:
+        encoding = 'utf-8-sig'
+
+    # ── Read full text and detect separator ───────────────────────────────────
     try:
-        with open(path, newline='', encoding='utf-8-sig', errors='replace') as f:
-            reader = csv.DictReader(f)
-            for i, row in enumerate(reader, start=2):
-                try:
-                    rank = int(row.get('rank', '').strip())
-                    sku = row.get('sku', '').strip().upper()
-                    units = int(row.get('total_net_units', '').strip())
-                    sales = int(row.get('total_net_sales_usd', '').strip())
-                    studios = int(row.get('studios_with_sales', '').strip())
-                    if rank >= 1 and sku and units >= 0 and sales >= 0 and studios >= 0:
-                        results.append({'rank': rank, 'sku': sku, 'total_net_units': units, 'total_net_sales_usd': sales, 'studios_with_sales': studios})
-                    else:
-                        print(f'[load_top_sellers] row {i} skipped (validation): {dict(row)}', file=sys.stderr)
-                except (ValueError, KeyError) as e:
-                    print(f'[load_top_sellers] row {i} skipped ({e}): {dict(row)}', file=sys.stderr)
+        with open(path, newline='', encoding=encoding, errors='replace') as f:
+            raw_text = f.read()
     except Exception as e:
         print(f'[load_top_sellers] error reading file: {e}', file=sys.stderr)
-    return results
+        return ([], {"scrubbed_count": 0, "scrubbed_examples": []}) if _return_stats else []
+
+    first_line = raw_text.split('\n')[0] if raw_text else ''
+    sep = '\t' if '\t' in first_line else ','
+
+    reader = csv.DictReader(io.StringIO(raw_text), delimiter=sep)
+    raw_header = [h.strip().lower().lstrip('﻿') for h in (reader.fieldnames or [])]
+
+    # ── Format A ──────────────────────────────────────────────────────────────
+    _fmt_a_expected = ['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales']
+    if raw_header == _fmt_a_expected:
+        results = []
+        for i, row in enumerate(reader, start=2):
+            try:
+                rank  = int(row.get('rank', '').strip())
+                sku   = row.get('sku', '').strip().upper()
+                units = int(row.get('total_net_units', '').strip())
+                sales = int(row.get('total_net_sales_usd', '').strip())
+                studios = int(row.get('studios_with_sales', '').strip())
+                if rank >= 1 and sku and units >= 0 and sales >= 0 and studios >= 0:
+                    results.append({'rank': rank, 'sku': sku,
+                                    'total_net_units': units,
+                                    'total_net_sales_usd': sales,
+                                    'studios_with_sales': studios})
+                else:
+                    print(f'[load_top_sellers] row {i} skipped (validation): {dict(row)}', file=sys.stderr)
+            except (ValueError, KeyError) as e:
+                print(f'[load_top_sellers] row {i} skipped ({e}): {dict(row)}', file=sys.stderr)
+        stats = {"scrubbed_count": 0, "scrubbed_examples": []}
+        return (results, stats) if _return_stats else results
+
+    # ── Format B ──────────────────────────────────────────────────────────────
+    if len(raw_header) == 2 and raw_header[0] == 'sku' and 'units' in raw_header[1]:
+        units_col = reader.fieldnames[1]  # preserve original casing for DictReader lookup
+        sku_col   = reader.fieldnames[0]
+
+        # Sum units per SKU
+        totals = {}   # SKU (upper) → int units
+        for i, row in enumerate(reader, start=2):
+            raw_sku = row.get(sku_col, '').strip().upper()
+            raw_val = row.get(units_col, '').strip().replace(',', '')
+            if not raw_sku:
+                continue
+            try:
+                units = int(float(raw_val))
+            except (ValueError, TypeError):
+                print(f'[load_top_sellers] row {i} skipped (bad units {raw_val!r})', file=sys.stderr)
+                continue
+            totals[raw_sku] = totals.get(raw_sku, 0) + units
+
+        # Filter to master SKU list
+        master_skus = load_master_skus()
+        scrubbed_skus = [s for s in totals if s not in master_skus]
+        scrubbed_count = len(scrubbed_skus)
+        if scrubbed_count:
+            examples = scrubbed_skus[:5]
+            print(f'[load_top_sellers] scrubbed {scrubbed_count} non-master SKUs from input '
+                  f'(examples: {examples})', file=sys.stderr)
+        for s in scrubbed_skus:
+            del totals[s]
+
+        # Sort by units desc, assign ranks
+        sorted_items = sorted(totals.items(), key=lambda x: x[1], reverse=True)
+        results = [
+            {'rank': rank, 'sku': sku, 'total_net_units': units,
+             'total_net_sales_usd': None, 'studios_with_sales': None}
+            for rank, (sku, units) in enumerate(sorted_items, start=1)
+        ]
+        stats = {"scrubbed_count": scrubbed_count,
+                 "scrubbed_examples": scrubbed_skus[:5]}
+        return (results, stats) if _return_stats else results
+
+    # ── Unrecognized format ───────────────────────────────────────────────────
+    raise ValueError(
+        f'Top Sellers file has unrecognized format. '
+        f'Expected 5-column CSV (rank/sku/…) or 2-column TSV (sku/units). '
+        f'Got columns: {raw_header}'
+    )
 
 
 def load_sku_prices():
@@ -3245,78 +3333,40 @@ def hq_database():
         elif action == 'upload_top_sellers':
             f = request.files.get('top_sellers_file')
             if f and f.filename:
+                import tempfile as _tempfile
                 _ts_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
+                # Write upload to a temp file so load_top_sellers() can detect
+                # format (encoding peek requires seekable file, not a stream).
+                _raw_bytes = f.read()
+                _fd, _tmp_path = _tempfile.mkstemp(suffix='.csv')
                 try:
-                    raw = f.read().decode('utf-8-sig', errors='replace')
-                except Exception as e:
-                    flash(f'Could not read uploaded file: {e}', 'error')
-                    return redirect(url_for('hq_database'))
-                _reader = csv.DictReader(io.StringIO(raw))
-                _expected = ['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales']
-                _actual = [h.strip().lower() for h in (_reader.fieldnames or [])]
-                if _actual != _expected:
-                    flash(f'Invalid header. Expected: {", ".join(_expected)}. Got: {", ".join(_actual) or "(none)"}.', 'error')
-                    return redirect(url_for('hq_database'))
-                _row_errors = []
-                _valid_rows = []
-                for _i, _row in enumerate(_reader, start=2):
-                    if not any(v.strip() for v in _row.values()):
-                        continue
-                    _rank_s = _row.get('rank', '').strip()
-                    _sku_s = _row.get('sku', '').strip().upper()
-                    _units_s = _row.get('total_net_units', '').strip()
-                    _sales_s = _row.get('total_net_sales_usd', '').strip()
-                    _studios_s = _row.get('studios_with_sales', '').strip()
+                    os.close(_fd)
+                    with open(_tmp_path, 'wb') as _tf:
+                        _tf.write(_raw_bytes)
                     try:
-                        _rank = int(_rank_s)
-                        if _rank < 1:
-                            _row_errors.append(f'Row {_i}: rank must be >= 1 (got {_rank_s!r}).')
-                            continue
-                    except ValueError:
-                        _row_errors.append(f'Row {_i}: rank is not a valid integer (got {_rank_s!r}).')
-                        continue
-                    if not _sku_s:
-                        _row_errors.append(f'Row {_i}: sku is empty.')
-                        continue
-                    if len(_sku_s.split()) != 1:
-                        _row_errors.append(f'Row {_i}: sku contains whitespace (got {_sku_s!r}).')
-                        continue
+                        _valid_rows, _stats = load_top_sellers(_tmp_path, _return_stats=True)
+                    except ValueError as _ve:
+                        flash(f'Failed to load uploaded Top Sellers file: {_ve}', 'error')
+                        return redirect(url_for('hq_database'))
+                    if not _valid_rows:
+                        flash('Top Sellers file appears empty or contained no valid rows.', 'error')
+                        return redirect(url_for('hq_database'))
+                    archive_file_if_exists(_ts_path, 'top_sellers')
+                    os.makedirs(MASTER_DIR, exist_ok=True)
+                    with open(_ts_path, 'wb') as _out:
+                        _out.write(_raw_bytes)
+                    _scrubbed = _stats.get('scrubbed_count', 0)
+                    _msg = f'Top Sellers data uploaded — {len(_valid_rows)} SKUs ranked'
+                    if _scrubbed:
+                        _msg += f', {_scrubbed} non-inventory SKUs scrubbed.'
+                    else:
+                        _msg += '.'
+                    flash(_msg, 'success')
+                finally:
                     try:
-                        _units = int(_units_s)
-                        if _units < 0:
-                            _row_errors.append(f'Row {_i}: total_net_units must be >= 0 (got {_units_s!r}).')
-                            continue
-                    except ValueError:
-                        _row_errors.append(f'Row {_i}: total_net_units is not a valid integer (got {_units_s!r}).')
-                        continue
-                    try:
-                        _sales = int(_sales_s)
-                        if _sales < 0:
-                            _row_errors.append(f'Row {_i}: total_net_sales_usd must be >= 0 (got {_sales_s!r}).')
-                            continue
-                    except ValueError:
-                        _row_errors.append(f'Row {_i}: total_net_sales_usd is not a valid integer (got {_sales_s!r}).')
-                        continue
-                    try:
-                        _studios = int(_studios_s)
-                        if _studios < 0:
-                            _row_errors.append(f'Row {_i}: studios_with_sales must be >= 0 (got {_studios_s!r}).')
-                            continue
-                    except ValueError:
-                        _row_errors.append(f'Row {_i}: studios_with_sales is not a valid integer (got {_studios_s!r}).')
-                        continue
-                    _valid_rows.append({'rank': _rank, 'sku': _sku_s, 'total_net_units': _units, 'total_net_sales_usd': _sales, 'studios_with_sales': _studios})
-                if _row_errors:
-                    for _msg in _row_errors:
-                        flash(_msg, 'error')
-                    return redirect(url_for('hq_database'))
-                archive_file_if_exists(_ts_path, 'top_sellers')
-                os.makedirs(MASTER_DIR, exist_ok=True)
-                with open(_ts_path, 'w', newline='', encoding='utf-8') as _out:
-                    _writer = csv.DictWriter(_out, fieldnames=['rank', 'sku', 'total_net_units', 'total_net_sales_usd', 'studios_with_sales'])
-                    _writer.writeheader()
-                    _writer.writerows(_valid_rows)
-                flash(f'Top Sellers file updated. {len(_valid_rows)} SKUs loaded.', 'success')
+                        os.unlink(_tmp_path)
+                    except OSError:
+                        pass
 
         elif action == 'upload_images':
             img_files = request.files.getlist('image_files')
@@ -3449,6 +3499,16 @@ def hq_sku_assignment_preview():
     import json as _json
     week_id = _sku_assignment.next_monday_week_identifier()
     result = _sku_assignment.generate_assignment(week_id)
+    # ── Top Sellers freshness ──────────────────────────────────────────────────
+    _ts_path = os.path.join(MASTER_DIR, 'Top_Sellers.csv')
+    if os.path.isfile(_ts_path):
+        _mtime = os.path.getmtime(_ts_path)
+        _ts_dt = datetime.fromtimestamp(_mtime)
+        result['top_sellers_last_uploaded_iso'] = _ts_dt.isoformat()
+        result['top_sellers_age_days'] = (datetime.now() - _ts_dt).days
+    else:
+        result['top_sellers_last_uploaded_iso'] = None
+        result['top_sellers_age_days'] = None
     return app.response_class(
         response=_json.dumps(result, indent=2, default=str),
         status=200,

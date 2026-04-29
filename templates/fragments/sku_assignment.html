@@ -181,6 +181,29 @@
             +'Algorithm settings: 60% sales rank weight, 40% time-since-last-count weight. '
             +'Top 20 SKUs selected. New SKUs delayed 4 weeks before entering rotation.'
             +'</p>';
+
+        /* ---- Top Sellers freshness indicator ---- */
+        var tsIso     = p.top_sellers_last_uploaded_iso || null;
+        var tsAgeDays = (p.top_sellers_age_days != null) ? p.top_sellers_age_days : null;
+        if (tsIso === null) {
+            html += '<p style="font-size:12px;color:#b45309;margin:6px 0 0;letter-spacing:0.02em;">'
+                +'⚠ Top Sellers data: not uploaded yet. Upload via HQ Database &rarr; Top Sellers.'
+                +'</p>';
+        } else {
+            var _tsDate = new Date(tsIso);
+            var _tsLabel = _tsDate.toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
+            var _daysLabel = tsAgeDays === 1 ? '1 day ago' : (tsAgeDays + ' days ago');
+            if (tsAgeDays >= 21) {
+                html += '<p style="font-size:12px;color:#b45309;margin:6px 0 0;letter-spacing:0.02em;">'
+                    +'⚠ Top Sellers data: uploaded '+_tsLabel+' ('+_daysLabel+') — consider uploading a fresh export.'
+                    +'</p>';
+            } else {
+                html += '<p style="font-size:12px;color:#999;margin:6px 0 0;letter-spacing:0.02em;">'
+                    +'Top Sellers data: uploaded '+_tsLabel+' ('+_daysLabel+').'
+                    +'</p>';
+            }
+        }
+
         html += '</div>';
 
         /* ---- Publish banner ---- */
