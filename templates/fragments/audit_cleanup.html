@@ -474,6 +474,7 @@
                     : _esc(dr.original_reason || '—');
                 return '<tr>' +
                     '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;white-space:nowrap;">' + _esc(dr.date         || '—') + '</td>' +
+                    '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;white-space:nowrap;">' + _esc(dr.movement_id  || '—') + '</td>' +
                     '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(dr.sku          || '—') + '</td>' +
                     '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;">'                    + _esc(dr.product_name || '—') + '</td>' +
                     '<td style="padding:6px 12px;border-bottom:1px solid #ececec;font-size:12px;text-align:right;">'   + _esc(String(dr.qty   || '—')) + '</td>' +
@@ -487,6 +488,7 @@
                 '<table style="width:100%;border-collapse:collapse;">' +
                 '<thead><tr style="background:#f2f2f2;">' +
                 '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;white-space:nowrap;">Date</th>' +
+                '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;white-space:nowrap;">Movement ID</th>' +
                 '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">SKU</th>' +
                 '<th style="padding:6px 12px;font-size:11px;text-align:left;font-weight:600;letter-spacing:0.06em;">Product Name</th>' +
                 '<th style="padding:6px 12px;font-size:11px;text-align:right;font-weight:600;letter-spacing:0.06em;">Qty</th>' +

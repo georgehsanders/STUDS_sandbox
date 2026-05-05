@@ -330,6 +330,7 @@ def process_file(file_bytes, original_filename):
                 "warehouse":       warehouse,
                 "original_reason": orig_reason,
                 "violation_type":  vtype,
+                "movement_id":     raw[C_MOVEMENT_ID],
             })
 
         row = {
