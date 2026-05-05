@@ -111,8 +111,7 @@ KEYWORD_MAP = [
              "Kit"),
 ]
 
-# Warehouse names to exclude (case-insensitive exact match after strip).
-_EXCLUDED_WAREHOUSES = {"whiplash ecom", "whiplash retail"}
+# No warehouses are excluded — all warehouse rows flow through to reports.
 
 # Mojibake replacements applied to every parsed Reason value before matching.
 # Key: garbled sequence; Value: intended character.
@@ -152,8 +151,6 @@ def _parse_reference(ref):
     if upper.startswith("SO#"):
         return False, None, "Unknown"
     if upper.startswith("PO#"):
-        return False, None, "Unknown"
-    if stripped.lower() == "stock alignment":
         return False, None, "Unknown"
 
     # Row survives — extract username
@@ -276,11 +273,8 @@ def process_file(file_bytes, original_filename):
         while len(raw) < 10:
             raw.append("")
 
-        # ── Warehouse filter ──────────────────────────────────────────────────
+        # ── Warehouse (all warehouses pass through) ───────────────────────────
         warehouse = raw[C_WAREHOUSE].strip()
-        if warehouse.lower() in _EXCLUDED_WAREHOUSES:
-            filtered_out += 1
-            continue
 
         # ── Reference filter + metadata extraction ────────────────────────────
         ref = raw[C_REFERENCE]
