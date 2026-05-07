@@ -24,8 +24,10 @@ from reconcile import (
     run_reconciliation,
 )
 import reconcile
+from help import help_bp
 
 app = Flask(__name__)
+app.register_blueprint(help_bp)
 
 # --- Authentication ---
 ADMIN_USERNAME = 'hq'

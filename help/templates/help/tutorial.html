@@ -1,0 +1,294 @@
+{% extends "hq_base.html" %}
+
+{% block title %}{{ tutorial_title }}{% endblock %}
+
+{% block right_nav %}
+    <a href="/hq/" class="hq-portal-link">BACK TO HQ</a>
+    <span class="hq-pipe">|</span>
+    <a href="{{ url_for('help.index') }}" class="hq-portal-link">HELP</a>
+{% endblock %}
+
+{% block content %}
+<div class="help-tut-sticky-header">
+    <div class="help-tut-header-row">
+        <div class="help-tut-header-left">
+            <h1 class="help-tut-title">{{ tutorial_title }}</h1>
+            <div class="help-tut-step-indicator">Step {{ current_step }} of {{ total_steps - 1 }}</div>
+        </div>
+        <div class="help-tut-header-right">
+            <button type="button" class="hq-btn hq-btn-lavender" id="help-sbs-btn" onclick="helpStartSideBySide()">START SIDE-BY-SIDE MODE</button>
+        </div>
+    </div>
+    <div class="help-tut-progress">
+        <div class="help-tut-progress-fill" style="width: {{ progress_pct }}%;"></div>
+    </div>
+    <div id="help-sbs-error" class="hq-warning-item" style="display:none; margin-top:10px;"></div>
+    <div id="help-sbs-tip" class="hq-warning-item hq-warning-success" style="display:none; margin-top:10px;">
+        <span>Tip: if your tutorial window didn't auto-resize, drag it to the left half of your screen. (Mac: Window menu &gt; Tile Window to Left of Screen. Windows: drag to left edge or press Win + Left Arrow.)</span>
+        <button type="button" class="help-tut-tip-dismiss" onclick="document.getElementById('help-sbs-tip').style.display='none'">&times;</button>
+    </div>
+</div>
+
+<div class="help-tut-content">
+    {% set s = steps[current_step] %}
+    <div class="hq-section help-tut-step">
+        <h2 class="hq-section-heading help-tut-step-heading">{{ s.heading }}</h2>
+
+        {% if current_step == 0 %}
+        <p class="help-tut-body">
+            Click the <strong>Start Side-by-Side Mode</strong> button at the top of this page to open the Zebra portal alongside the tutorial. Then log in with your store credentials.
+        </p>
+
+        {% elif current_step == 1 %}
+        <ol class="help-tut-substeps">
+            <li><strong>1.a)</strong> Click on &ldquo;My Data&rdquo; on the left.</li>
+            <li><strong>1.b)</strong> Click on the three dots for the old Zebra files you want to delete and select &ldquo;Remove&rdquo;.</li>
+            <li><strong>1.c)</strong> Click &ldquo;Remove linked file&rdquo;.</li>
+            <li><strong>1.d)</strong> Repeat for all old files until your data files are empty.</li>
+        </ol>
+
+        {% elif current_step == 2 %}
+        <ol class="help-tut-substeps">
+            <li>
+                <strong>2.a)</strong> Download the new data files to your computer.
+                <div class="help-tut-placeholder-wrap">
+                    <!-- TODO: wire up to backend file storage when HQ upload tool is built. This button should download a zip of the latest data files. -->
+                    <button type="button" class="hq-btn hq-btn-lavender help-tut-placeholder-btn" onclick="document.getElementById('help-placeholder-note').style.display='block'">
+                        DOWNLOAD NEW DATA FILES
+                    </button>
+                    <div class="help-tut-placeholder-caption">(Coming soon &mdash; HQ will enable this)</div>
+                    <div id="help-placeholder-note" class="hq-warning-item" style="display:none; margin-top:8px;">
+                        This will be enabled once HQ uploads the latest data files. For now, get the files from your usual source.
+                    </div>
+                </div>
+            </li>
+            <li><strong>2.b)</strong> Click &ldquo;Upload File&rdquo; in Zebra and double-click on the first (of 5) files to drop it into Zebra.</li>
+            <li><strong>2.c)</strong> Repeat this process until all five of the new Zebra files are in your portal.</li>
+        </ol>
+
+        {% elif current_step == 3 %}
+        <ol class="help-tut-substeps">
+            <li><strong>3.a)</strong> Click on &ldquo;My Designs&rdquo; on the left.</li>
+            <li><strong>3.b)</strong> Click on your first label template (1 Bin Labels - Fashion) and click &ldquo;Edit&rdquo;.</li>
+            <li><strong>3.c)</strong> Click the Lock icon in the top right corner to unlock the design.</li>
+            <li><strong>3.d)</strong> Click on the (-) button to disconnect the old data file and click &ldquo;Disconnect&rdquo;.</li>
+            <li><strong>3.e)</strong> Click &ldquo;Connect Data File&rdquo; in the top right corner and select the correct corresponding data file that matches the title of the template you are in.</li>
+        </ol>
+
+        {% elif current_step == 4 %}
+        <p class="help-tut-body">
+            For bin labels, there are four fields you have to map: <strong>Description</strong>, <strong>SKU Barcode</strong>, <strong>Material</strong>, and <strong>SKU</strong>.
+        </p>
+        <ol class="help-tut-substeps">
+            <li><strong>4.a)</strong> Click on your first field &mdash; the &ldquo;Description&rdquo; text box &mdash; and switch the input from <em>Manual</em> to <em>From Data File</em>.</li>
+            <li><strong>4.b)</strong> Change the &ldquo;Column from Data File&rdquo; from SKU to <strong>DESCRIPTION</strong>.</li>
+            <li>
+                <strong>4.c)</strong> You&rsquo;ve successfully mapped your first data field. Now repeat these steps for the remaining three fields:
+                <ul class="help-tut-sublist">
+                    <li><strong>SKU Barcode:</strong> switch Input to &ldquo;From Data File&rdquo;, Column from Data File should be <strong>SKU</strong></li>
+                    <li><strong>Material:</strong> switch Input to &ldquo;From Data File&rdquo;, Column from Data File should be <strong>MATERIALS</strong></li>
+                    <li><strong>SKU (text):</strong> switch Input to &ldquo;From Data File&rdquo;, Column from Data File should be <strong>SKU</strong> (same as the barcode, but this field renders the SKU as text)</li>
+                </ul>
+            </li>
+        </ol>
+
+        {% elif current_step == 5 %}
+        <p class="help-tut-body">
+            When complete, your newly mapped bin label template should look like the example below. Hit the <strong>Lock</strong> button in the top right corner again to lock in your changes, then test-print a label to confirm everything is mapped correctly.
+        </p>
+        <p class="help-tut-body">
+            Once locked, click &ldquo;Exit Designer&rdquo; and repeat <strong>Steps 3 through 5</strong> for the remaining four templates.
+        </p>
+        {% endif %}
+
+        {% if s.pages %}
+        <div class="help-tut-images">
+            {% for p in s.pages %}
+            <img src="{{ url_for('help.static', filename=p) }}" alt="Reference page {{ loop.index }}" class="help-tut-image">
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="help-tut-sticky-footer">
+    {% if prev_step is not none %}
+    <a href="{{ url_for('help.zebra_label_setup', step=prev_step) }}" class="hq-btn hq-btn-gold">&larr; PREVIOUS</a>
+    {% else %}
+    <button type="button" class="hq-btn hq-btn-gold" disabled>&larr; PREVIOUS</button>
+    {% endif %}
+
+    {% if is_last %}
+    <a href="{{ url_for('help.index') }}" class="hq-btn hq-btn-lavender">DONE</a>
+    {% else %}
+    <a href="{{ url_for('help.zebra_label_setup', step=next_step) }}" class="hq-btn hq-btn-lavender">NEXT &rarr;</a>
+    {% endif %}
+</div>
+
+<style>
+.help-tut-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 18px 0 14px 0;
+    margin-bottom: 24px;
+}
+.help-tut-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+.help-tut-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.help-tut-title {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: #1a1a1a;
+    margin: 0;
+}
+.help-tut-step-indicator {
+    font-size: 11px;
+    color: #666666;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.help-tut-progress {
+    margin-top: 14px;
+    height: 4px;
+    background: #f0f0f0;
+    border: 1px solid #e0e0e0;
+    border-radius: 0;
+    overflow: hidden;
+}
+.help-tut-progress-fill {
+    height: 100%;
+    background: #c8f135;
+    transition: width 0.25s ease;
+}
+.help-tut-tip-dismiss {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    margin-left: 12px;
+    color: #1a1a1a;
+}
+
+.help-tut-content {
+    padding-bottom: 110px; /* leave room for sticky footer */
+}
+.help-tut-step-heading {
+    font-size: 15px;
+    margin-bottom: 14px;
+}
+.help-tut-body {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    margin-bottom: 14px;
+}
+.help-tut-substeps {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+.help-tut-substeps > li {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    padding: 8px 0;
+    border-bottom: 1px dashed #f0f0f0;
+}
+.help-tut-substeps > li:last-child {
+    border-bottom: none;
+}
+.help-tut-sublist {
+    margin: 8px 0 0 18px;
+    padding-left: 14px;
+}
+.help-tut-sublist li {
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 4px;
+}
+
+.help-tut-placeholder-wrap {
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px dashed #cccccc;
+    background: #fafafa;
+}
+.help-tut-placeholder-caption {
+    font-size: 11px;
+    color: #999999;
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+}
+
+.help-tut-images {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    margin-top: 22px;
+}
+.help-tut-image {
+    max-width: 800px;
+    width: 100%;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    background: #ffffff;
+}
+
+.help-tut-sticky-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    background: #ffffff;
+    border-top: 1px solid #e0e0e0;
+    padding: 14px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+</style>
+
+<script>
+function helpStartSideBySide() {
+    var errEl = document.getElementById('help-sbs-error');
+    var tipEl = document.getElementById('help-sbs-tip');
+    errEl.style.display = 'none';
+
+    var halfW = Math.floor(window.screen.availWidth / 2);
+    var fullH = window.screen.availHeight;
+    var leftPos = Math.floor(window.screen.availWidth / 2);
+    var features = 'width=' + halfW + ',height=' + fullH + ',left=' + leftPos + ',top=0,noopener,noreferrer';
+
+    var popup = window.open('https://zsbportal.zebra.com', 'zebraPortal', features);
+
+    if (!popup) {
+        errEl.textContent = 'Your browser blocked the popup. Allow popups for this site, then click the button again.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        window.resizeTo(halfW, fullH);
+        window.moveTo(0, 0);
+    } catch (e) {
+        // Browsers may silently refuse to resize/move the main tab — that's fine.
+    }
+
+    tipEl.style.display = 'block';
+}
+</script>
+{% endblock %}
