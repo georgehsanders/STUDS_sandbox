@@ -1,0 +1,72 @@
+{% extends "hq_base.html" %}
+{% from "macros.html" import flash_messages, section_nav with context %}
+
+{% block title %}History — Slot {{ slot_number }}{% endblock %}
+
+{% block right_nav %}
+    <a href="/hq/upload" class="hq-portal-link">FILES</a>
+    <span class="hq-pipe">|</span>
+    <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
+    <span class="hq-pipe">|</span>
+    <a href="/help/" class="hq-portal-link">HELP</a>
+{% endblock %}
+
+{% block section_nav %}{{ section_nav() }}{% endblock %}
+
+{% block content %}
+        {{ flash_messages() }}
+
+        <div class="hq-section">
+            <a href="{{ url_for('master_templates.hq_index') }}" class="hq-return-link" style="display:inline-block;margin-bottom:16px;">&larr; BACK TO MASTER TEMPLATES</a>
+
+            <h2 class="hq-section-heading">History — Slot {{ slot_number }}: {{ canonical_filename }}</h2>
+            <p class="hq-help-text">
+                Every version uploaded to this slot. Newest first. Each download
+                returns the file with the canonical filename above, regardless of
+                what HQ named it on upload.
+            </p>
+
+            {% if versions %}
+            <table class="hq-table">
+                <thead>
+                    <tr>
+                        <th style="width:80px;">Version</th>
+                        <th>Uploaded As</th>
+                        <th>Size</th>
+                        <th>Uploaded At</th>
+                        <th>Notes</th>
+                        <th style="width:1%;white-space:nowrap;">Download</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in versions %}
+                    <tr>
+                        <td><strong>#{{ v.id }}</strong>{% if loop.first %} <span class="mt-latest-badge">LATEST</span>{% endif %}</td>
+                        <td>{{ v.uploaded_filename }}</td>
+                        <td>{{ v.size }}</td>
+                        <td>{{ v.uploaded_at }}</td>
+                        <td>{{ v.notes or '—' }}</td>
+                        <td><a href="{{ url_for('master_templates.hq_download_version', version_id=v.id) }}" class="hq-btn-delete hq-btn-download">DOWNLOAD</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="hq-no-disc">No versions uploaded to this slot yet.</p>
+            {% endif %}
+        </div>
+
+<style>
+.mt-latest-badge {
+    display: inline-block;
+    background: #c8f135;
+    border: 1px solid #000;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+</style>
+{% endblock %}

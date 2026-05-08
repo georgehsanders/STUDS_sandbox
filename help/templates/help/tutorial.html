@@ -52,13 +52,12 @@
             <li>
                 <strong>2.a)</strong> Download the new data files to your computer.
                 <div class="help-tut-placeholder-wrap">
-                    <!-- TODO: wire up to backend file storage when HQ upload tool is built. This button should download a zip of the latest data files. -->
-                    <button type="button" class="hq-btn hq-btn-lavender help-tut-placeholder-btn" onclick="document.getElementById('help-placeholder-note').style.display='block'">
+                    <a href="{{ url_for('master_templates.studio_zip') }}" class="hq-btn hq-btn-lavender help-tut-placeholder-btn">
                         DOWNLOAD NEW DATA FILES
-                    </button>
-                    <div class="help-tut-placeholder-caption">(Coming soon &mdash; HQ will enable this)</div>
-                    <div id="help-placeholder-note" class="hq-warning-item" style="display:none; margin-top:8px;">
-                        This will be enabled once HQ uploads the latest data files. For now, get the files from your usual source.
+                    </a>
+                    <div class="help-tut-placeholder-caption">
+                        Click to download the latest master files from HQ as a ZIP.
+                        Extract the ZIP to get all 5 files, then drag each one into Zebra in Step 2.b.
                     </div>
                 </div>
             </li>

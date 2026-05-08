@@ -31,3 +31,6 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Master Zebra templates — uploaded files live here, not in git
+master_templates_storage/

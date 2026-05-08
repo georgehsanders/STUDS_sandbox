@@ -25,9 +25,12 @@ from reconcile import (
 )
 import reconcile
 from help import help_bp
+from master_templates import master_templates_bp, init_master_templates_db
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB cap for HQ uploads (master templates module)
 app.register_blueprint(help_bp)
+app.register_blueprint(master_templates_bp)
 
 # --- Authentication ---
 ADMIN_USERNAME = 'hq'
@@ -3764,6 +3767,7 @@ def hq_sku_assignment_searchable_skus():
 
 init_store_db()
 init_archive_db()
+init_master_templates_db()
 
 
 @app.context_processor

@@ -1,0 +1,239 @@
+{% extends "hq_base.html" %}
+{% from "macros.html" import btn_gold, flash_messages, section_nav with context %}
+
+{% block title %}Master Zebra Templates{% endblock %}
+
+{% block right_nav %}
+    <a href="/hq/upload" class="hq-portal-link">FILES</a>
+    <span class="hq-pipe">|</span>
+    <a href="/hq/master-templates" class="hq-portal-link">REFRESH</a>
+    <span class="hq-pipe">|</span>
+    <a href="/hq/settings" class="hq-portal-link">SETTINGS</a>
+    <span class="hq-pipe">|</span>
+    <a href="/help/" class="hq-portal-link">HELP</a>
+{% endblock %}
+
+{% block section_nav %}{{ section_nav() }}{% endblock %}
+
+{% block content %}
+        {{ flash_messages() }}
+
+        <div class="hq-section">
+            <h2 class="hq-section-heading">Master Zebra Templates</h2>
+            <p class="hq-help-text">
+                Upload the 5 master data files here. Stores will download these
+                directly into their Zebra portals via the tutorial. Filenames are
+                enforced — files you upload here will always be served to stores
+                with the exact names shown below.
+            </p>
+
+            <div class="mt-callout">
+                <div class="mt-callout-row">
+                    <div class="mt-callout-label">Stores' download URL</div>
+                    <code class="mt-callout-url" id="stores-zip-url">{{ studio_zip_url }}</code>
+                </div>
+                <div class="mt-callout-actions">
+                    <button type="button" class="hq-btn hq-btn-gold" onclick="copyStoresUrl()">COPY URL</button>
+                    <a href="{{ studio_zip_url }}" class="hq-btn hq-btn-lavender">DOWNLOAD STORES' ZIP</a>
+                </div>
+                <div id="stores-url-copied" class="mt-callout-copied" style="display:none;">URL copied to clipboard.</div>
+            </div>
+        </div>
+
+        <div class="hq-section">
+            <h2 class="hq-section-heading">Template Slots</h2>
+            <p class="hq-help-text">All 5 slots are listed regardless of upload status. Each slot keeps full version history.</p>
+
+            <table class="hq-table mt-slots-table">
+                <thead>
+                    <tr>
+                        <th style="width:50px;">Slot</th>
+                        <th>Canonical Filename</th>
+                        <th>Last Uploaded</th>
+                        <th>Uploaded As</th>
+                        <th>Size</th>
+                        <th style="width:1%;white-space:nowrap;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr class="{% if not r.has_version %}mt-row-empty{% endif %}">
+                        <td><strong>{{ r.slot }}</strong></td>
+                        <td><code class="mt-canonical">{{ r.canonical }}</code></td>
+                        <td class="mt-uploaded-at">{{ r.uploaded_at }}</td>
+                        <td>{{ r.uploaded_filename or '—' }}</td>
+                        <td>{{ r.size }}</td>
+                        <td class="mt-actions-cell">
+                            <button type="button" class="hq-btn-delete" onclick="openUploadFor({{ r.slot }})">UPLOAD NEW VERSION</button>
+                            {% if r.has_version %}
+                            <a href="{{ url_for('master_templates.hq_slot_history', slot_number=r.slot) }}" class="hq-btn-delete">HISTORY ({{ r.version_count }})</a>
+                            <a href="{{ url_for('master_templates.hq_download_latest', slot_number=r.slot) }}" class="hq-btn-delete hq-btn-download">DOWNLOAD LATEST</a>
+                            {% else %}
+                            <span class="mt-action-disabled">HISTORY</span>
+                            <span class="mt-action-disabled">DOWNLOAD LATEST</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="hq-section" id="upload-section">
+            <h2 class="hq-section-heading">Upload New Version</h2>
+            <p class="hq-help-text">
+                Pick the slot you want to update. The file you upload can be named
+                anything — it will be stored and served to stores with the canonical
+                filename for that slot.
+            </p>
+
+            <form method="POST" action="{{ url_for('master_templates.hq_upload') }}" enctype="multipart/form-data" class="mt-upload-form">
+                <div class="mt-form-row">
+                    <label class="hq-control-label" style="margin:0;">SLOT
+                        <select name="slot_number" id="slot-picker" class="hq-select" required>
+                            {% for n in slot_numbers %}
+                            <option value="{{ n }}">{{ n }} — {{ canonical_slots[n] }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </div>
+                <div class="mt-form-row">
+                    <label class="hq-control-label" style="margin:0;display:block;">FILE
+                        <input type="file" name="file" required style="display:block;margin-top:6px;">
+                    </label>
+                </div>
+                <div class="mt-form-row">
+                    <label class="hq-control-label" style="margin:0;display:block;">NOTES (OPTIONAL)
+                        <textarea name="notes" rows="2" class="hq-textarea mt-notes" placeholder="e.g. 'Spring 2026 SKU refresh'"></textarea>
+                    </label>
+                </div>
+                <div class="mt-form-row">
+                    {{ btn_gold('UPLOAD VERSION', type='submit') }}
+                    <span class="hq-help-text" style="margin-left:14px;">Max {{ max_upload_mb }} MB.</span>
+                </div>
+            </form>
+        </div>
+
+<style>
+.mt-callout {
+    border: 1px solid #e0e0e0;
+    background: #fafafa;
+    padding: 14px 18px;
+    margin-top: 14px;
+}
+.mt-callout-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.mt-callout-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #666;
+    font-weight: 500;
+}
+.mt-callout-url {
+    font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    padding: 4px 10px;
+    color: #1a1a1a;
+}
+.mt-callout-actions {
+    display: flex;
+    gap: 10px;
+}
+.mt-callout-copied {
+    font-size: 11px;
+    color: #2d6930;
+    margin-top: 8px;
+}
+.mt-canonical {
+    font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border: 1px solid #e8e8e8;
+}
+.mt-uploaded-at {
+    color: #555;
+    font-size: 12px;
+}
+.mt-row-empty .mt-uploaded-at {
+    color: #999;
+    font-style: italic;
+}
+.mt-actions-cell {
+    display: flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+.mt-action-disabled {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #bbb;
+    border: 1px dashed #e0e0e0;
+}
+.mt-form-row {
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.mt-notes {
+    width: 100%;
+    max-width: 500px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    margin-top: 6px;
+}
+</style>
+
+<script>
+function openUploadFor(slotNumber) {
+    var picker = document.getElementById('slot-picker');
+    if (picker) picker.value = String(slotNumber);
+    var section = document.getElementById('upload-section');
+    if (section) section.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function copyStoresUrl() {
+    var el = document.getElementById('stores-zip-url');
+    if (!el) return;
+    var text = window.location.origin + el.textContent.trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showCopied, function() {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showCopied(); } catch (e) {}
+    document.body.removeChild(ta);
+}
+
+function showCopied() {
+    var n = document.getElementById('stores-url-copied');
+    if (!n) return;
+    n.style.display = 'block';
+    setTimeout(function() { n.style.display = 'none'; }, 2500);
+}
+</script>
+{% endblock %}
