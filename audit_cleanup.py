@@ -283,6 +283,33 @@ def process_file(file_bytes, original_filename):
             filtered_out += 1
             continue
 
+        # ── Stock alignment auto-classification ───────────────────────────────
+        # Rows whose Reference field is exactly "Stock alignment" are
+        # system-generated: no user name, no reason code, no Brightpearl
+        # metadata block. Classify them automatically and do NOT flag for
+        # human review. Counts toward AUTO-CLEANED in the summary.
+        if ref.strip().lower() == "stock alignment":
+            surviving.append({
+                "row_index":        len(surviving),
+                "product_id":       raw[C_PRODUCT_ID],
+                "sku":              raw[C_SKU],
+                "product_name":     raw[C_PRODUCT_NAME],
+                "options":          raw[C_OPTIONS],
+                "quantity":         raw[C_QUANTITY],
+                "price":            raw[C_PRICE],
+                "reference":        ref,
+                "warehouse":        warehouse,
+                "date":             raw[C_DATE],
+                "movement_id":      raw[C_MOVEMENT_ID],
+                "type_of_movement": "Stock alignment",
+                "flagged":          False,
+                "username":         username,
+                "flag_type":        None,
+                "flag_detail":      {},
+            })
+            auto_cleaned_count += 1
+            continue
+
         # ── Reason classification ─────────────────────────────────────────────
         row_index = len(surviving)
         movement_type, flag_type, flag_detail = _classify_reason(reason)
